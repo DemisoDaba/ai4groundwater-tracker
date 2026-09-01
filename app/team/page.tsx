@@ -31,8 +31,17 @@ type CurrentUser = {
   email: string;
 };
 
+type Project = {
+  id: number;
+  project_code: string;
+  project_name: string;
+  reference: string;
+  pi_name: string;
+};
+
 export default function TeamDashboard() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
@@ -54,9 +63,27 @@ export default function TeamDashboard() {
         return;
       }
 
+      // Get the project selected during login
+      const storedProjectId = localStorage.getItem("selectedProjectId");
+
+      if (!storedProjectId) {
+        alert("Project information is missing. Please log in again.");
+        window.location.href = "/";
+        return;
+      }
+
+      const projectId = Number(storedProjectId);
+
+      if (!Number.isFinite(projectId)) {
+        alert("Invalid project selection. Please log in again.");
+        window.location.href = "/";
+        return;
+      }
+
+      // Load authenticated user's profile
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("member_id, full_name, email, role")
+        .select("member_id, full_name, email")
         .eq("id", user.id)
         .single();
 
@@ -66,10 +93,59 @@ export default function TeamDashboard() {
         return;
       }
 
-      if (profile.role === "admin") {
+      /*
+       * Verify this user belongs to the selected project
+       * and get project-specific admin status.
+       */
+      const { data: projectMember, error: projectMemberError } =
+        await supabase
+          .from("project_member_directory")
+          .select(
+            "project_id, member_id, full_name, email, project_role, is_project_admin"
+          )
+          .eq("project_id", projectId)
+          .eq("member_id", profile.member_id)
+          .maybeSingle();
+
+      if (projectMemberError) {
+        console.error("PROJECT MEMBER ERROR:", projectMemberError);
+        alert("Unable to verify your project membership.");
+        return;
+      }
+
+      if (!projectMember) {
+        alert("You are not assigned to this project.");
+        window.location.href = "/";
+        return;
+      }
+
+      /*
+       * IMPORTANT:
+       * Do NOT use profiles.role.
+       *
+       * Admin status is determined by:
+       * project_member_directory.is_project_admin
+       */
+
+      if (projectMember.is_project_admin === true) {
         window.location.href = "/admin";
         return;
       }
+
+      // Load selected project
+      const { data: projectData, error: projectError } = await supabase
+        .from("projects")
+        .select("id, project_code, project_name, reference, pi_name")
+        .eq("id", projectId)
+        .maybeSingle();
+
+      if (projectError || !projectData) {
+        console.error("PROJECT ERROR:", projectError);
+        alert("Unable to load project information.");
+        return;
+      }
+
+      setProject(projectData);
 
       setCurrentUser({
         code: profile.member_id,
@@ -77,7 +153,7 @@ export default function TeamDashboard() {
         email: profile.email,
       });
 
-      await loadTasks(profile.member_id);
+      await loadTasks(profile.member_id, projectId);
     } catch (error) {
       console.error("DASHBOARD ERROR:", error);
     } finally {
@@ -85,13 +161,14 @@ export default function TeamDashboard() {
     }
   };
 
-  const loadTasks = async (memberId: string) => {
+  const loadTasks = async (memberId: string, projectId: number) => {
     const { data, error } = await supabase
       .from("tasks")
       .select(
         "id, member_id, task, start_date, end_date, task_status, payment_status, submitted_at"
       )
       .eq("member_id", memberId)
+      .eq("project_id", projectId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -133,7 +210,8 @@ export default function TeamDashboard() {
           submitted_at: submittedAt,
         })
         .eq("id", id)
-        .eq("member_id", currentUser?.code);
+        .eq("member_id", currentUser?.code)
+        .eq("project_id", project?.id);
 
       if (error) {
         console.error("SUBMIT TASK ERROR:", error);
@@ -203,7 +281,6 @@ export default function TeamDashboard() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      {/* Top Navigation - Fixed at top, but with left margin on desktop to not overlap sidebar */}
       <div className="fixed top-0 left-0 right-0 z-50 lg:left-72">
         <TeamTopNav
           name={currentUser?.name}
@@ -211,36 +288,30 @@ export default function TeamDashboard() {
         />
       </div>
 
-      {/* Main layout with sidebar */}
       <div className="flex min-h-screen">
-        {/* pt-16 for mobile top nav spacer */}
         <div className="h-16 lg:hidden"></div>
 
-        {/* =========================================================
-            DESKTOP LEFT SIDEBAR - Fixed with dark theme
-        ========================================================= */}
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-slate-800 bg-slate-900 lg:flex lg:flex-col">
-          {/* Sidebar Header */}
           <div className="border-b border-slate-800 px-6 py-6">
             <h1 className="text-xl font-bold tracking-tight text-white">
-              AI4Groundwater
+              {project?.project_name ?? "AI4Groundwater"}
             </h1>
+
             <p className="mt-1 text-xs font-semibold text-slate-400">
-              Res/AWTI/078/26
+              {project?.reference ?? ""}
             </p>
+
             <p className="mt-0.5 text-xs text-slate-500">
               Team Portal
             </p>
           </div>
 
-          {/* Navigation */}
           <nav className="flex-1 overflow-y-auto px-4 py-6">
             <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Workspace
             </p>
 
             <div className="space-y-1">
-              {/* Dashboard */}
               <Link
                 href="/team"
                 className="flex items-center gap-3 rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
@@ -251,7 +322,6 @@ export default function TeamDashboard() {
                 <span>Dashboard</span>
               </Link>
 
-              {/* Assigned Work */}
               <a
                 href="#assigned-work"
                 className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
@@ -262,7 +332,6 @@ export default function TeamDashboard() {
                 <span>My Assigned Work</span>
               </a>
 
-              {/* Ground Rules */}
               <Link
                 href="/rules"
                 className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
@@ -275,12 +344,12 @@ export default function TeamDashboard() {
             </div>
           </nav>
 
-          {/* User Info */}
           <div className="border-t border-slate-800 p-4">
             <div className="rounded-xl bg-slate-800/50 p-3">
               <p className="truncate text-sm font-semibold text-white">
                 {currentUser?.name ?? "Loading..."}
               </p>
+
               <p className="mt-0.5 truncate text-xs text-slate-400">
                 {currentUser?.code ?? ""}
               </p>
@@ -288,29 +357,29 @@ export default function TeamDashboard() {
           </div>
         </aside>
 
-        {/* =========================================================
-            MAIN CONTENT
-        ========================================================= */}
         <div className="flex-1 lg:ml-72">
-          {/* lg:ml-72 to account for sidebar width */}
-
-          {/* Content section - padding for fixed elements */}
           <section className="mx-auto max-w-7xl px-4 pb-10 pt-4 sm:px-6 lg:px-8 lg:pt-24">
-            {/* pt-24 on desktop accounts for the fixed top nav */}
 
-            {/* Profile */}
             <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Team Member
                   </p>
+
                   <h2 className="mt-1 text-2xl font-bold text-slate-900">
                     {currentUser?.name ?? "Loading..."}
                   </h2>
+
                   <p className="mt-1 text-sm text-slate-500">
                     {currentUser?.email ?? ""}
                   </p>
+
+                  {project && (
+                    <p className="mt-2 text-sm font-semibold text-slate-700">
+                      {project.reference} · PI: {project.pi_name}
+                    </p>
+                  )}
                 </div>
 
                 {currentUser?.code && (
@@ -321,7 +390,6 @@ export default function TeamDashboard() {
               </div>
             </div>
 
-            {/* Statistics */}
             <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <p className="text-sm text-slate-500">My Tasks</p>
@@ -359,17 +427,16 @@ export default function TeamDashboard() {
               </div>
             </div>
 
-            {/* Assigned Work */}
             <div id="assigned-work" className="mb-5 scroll-mt-28">
               <h2 className="text-xl font-bold text-slate-900">
                 My Assigned Work
               </h2>
+
               <p className="mt-1 text-sm text-slate-500">
                 Complete your assigned work and submit it for administrator review.
               </p>
             </div>
 
-            {/* Task Table */}
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[950px] text-left">
@@ -399,7 +466,10 @@ export default function TeamDashboard() {
                   <tbody className="divide-y divide-slate-100">
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="px-5 py-14 text-center text-sm text-slate-500">
+                        <td
+                          colSpan={6}
+                          className="px-5 py-14 text-center text-sm text-slate-500"
+                        >
                           Loading your tasks...
                         </td>
                       </tr>
@@ -409,9 +479,11 @@ export default function TeamDashboard() {
                           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-xl">
                             📋
                           </div>
+
                           <p className="mt-4 text-sm font-semibold text-slate-700">
                             No assigned work
                           </p>
+
                           <p className="mt-1 text-xs text-slate-400">
                             Your assigned tasks will appear here.
                           </p>
@@ -419,18 +491,24 @@ export default function TeamDashboard() {
                       </tr>
                     ) : (
                       tasks.map((task) => (
-                        <tr key={task.id} className="transition hover:bg-slate-50">
+                        <tr
+                          key={task.id}
+                          className="transition hover:bg-slate-50"
+                        >
                           <td className="px-5 py-5">
                             <p className="max-w-[400px] text-sm font-medium leading-6 text-slate-900">
                               {task.task}
                             </p>
                           </td>
+
                           <td className="px-5 py-5 text-sm text-slate-600">
                             {task.start_date}
                           </td>
+
                           <td className="px-5 py-5 text-sm text-slate-600">
                             {task.end_date}
                           </td>
+
                           <td className="px-5 py-5">
                             <span
                               className={
@@ -441,6 +519,7 @@ export default function TeamDashboard() {
                               {task.task_status}
                             </span>
                           </td>
+
                           <td className="px-5 py-5">
                             <span
                               className={
@@ -451,6 +530,7 @@ export default function TeamDashboard() {
                               {task.payment_status}
                             </span>
                           </td>
+
                           <td className="px-5 py-5">
                             {task.task_status === "Pending Review" ||
                             task.submitted_at ? (
@@ -482,30 +562,35 @@ export default function TeamDashboard() {
               </div>
             </div>
 
-            {/* Work Submission */}
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg">
                   ℹ️
                 </div>
+
                 <div>
                   <h3 className="text-sm font-bold text-slate-800">
                     Work Submission
                   </h3>
+
                   <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-500">
                     <li>
                       • Complete the assigned work within the assigned period.
                     </li>
+
                     <li>
                       • Click <strong>Submit Task</strong> when your work is ready for review.
                     </li>
+
                     <li>
                       • After submission, the task becomes{" "}
                       <strong>Pending Review</strong>.
                     </li>
+
                     <li>
                       • The administrator controls the official task status.
                     </li>
+
                     <li>
                       • The administrator controls the payment status.
                     </li>
@@ -514,21 +599,23 @@ export default function TeamDashboard() {
               </div>
             </div>
 
-            {/* Ground Rules */}
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white shadow-sm">
               <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Project Guidelines
                   </p>
+
                   <h3 className="mt-1 text-lg font-bold">
                     Review the Ground Rules
                   </h3>
+
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-300">
                     Please review the project working rules, responsibilities,
                     deadlines, communication requirements, and task reassignment procedures.
                   </p>
                 </div>
+
                 <Link
                   href="/rules"
                   className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
@@ -537,6 +624,7 @@ export default function TeamDashboard() {
                 </Link>
               </div>
             </div>
+
           </section>
         </div>
       </div>

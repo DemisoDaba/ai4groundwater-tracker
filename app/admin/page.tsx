@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -10,10 +11,11 @@ type TaskStatus =
   | "Completed"
   | "Reassigned";
 
-type PaymentStatus = "Pending" | "Paid";
+type PaymentStatus = "Pending" | "Paid" | "Denied";
 
 type Task = {
   id: number;
+  project_id: number;
   member_id: string;
   task: string;
   start_date: string;
@@ -24,79 +26,27 @@ type Task = {
   created_at?: string;
 };
 
-type Profile = {
+type Project = {
+  id: number;
+  project_code: string;
+  project_name: string;
+  reference: string;
+  pi_name: string;
+};
+
+type TeamMember = {
+  id: number;
   member_id: string;
   full_name: string;
   email: string;
-  role: "admin" | "team";
+  project_role: string;
+  is_project_admin: boolean;
+  project_id?: number;
+  is_registered?: boolean;
 };
-
-type TeamDirectoryMember = {
-  code: string;
-  name: string;
-  email: string;
-};
-
-const TEAM_DIRECTORY: TeamDirectoryMember[] = [
-  {
-    code: "P1*",
-    name: "Mikiyas Ali",
-    email: "mikiasali333@gmail.com",
-  },
-  {
-    code: "P2",
-    name: "Zelalem Anley (M.Sc)",
-    email: "zelalemanley3@gmail.com",
-  },
-  {
-    code: "P3",
-    name: "Mullusew Bezabih (M.Sc)",
-    email: "bmullusew@gmail.com",
-  },
-  {
-    code: "P4",
-    name: "Sintayehu Yadete (Ph.D.)",
-    email: "sintayadete5@gmail.com",
-  },
-  {
-    code: "P5",
-    name: "Meron Mohammed (M.Sc)",
-    email: "meronamin23@gmail.com",
-  },
-  {
-    code: "P6",
-    name: "Getachew Enssa (M.Sc)",
-    email: "getachew.enssa12@gmail.com",
-  },
-  {
-    code: "P7",
-    name: "Sufiyan Abdurhman (M.Sc)",
-    email: "sufi.abdi@gmail.com",
-  },
-  {
-    code: "P8",
-    name: "Aschalewu Cherie (Ph.D.)",
-    email: "aschalewc@gmail.com",
-  },
-  {
-    code: "P9",
-    name: "Tafese Fitensa (M.Sc)",
-    email: "tatiyihun@gmail.com",
-  },
-  {
-    code: "P10",
-    name: "Kinfe Bereda (M.Sc)",
-    email: "kinfem110@gmail.com",
-  },
-  {
-    code: "P11",
-    name: "Babur Tesfaye (M.Sc)",
-    email: "baburtesfaye@gmail.com",
-  },
-];
 
 const EMPTY_FORM = {
-  teamMember: "P1*",
+  teamMember: "",
   task: "",
   startDate: "",
   endDate: "",
@@ -116,8 +66,12 @@ export default function AdminDashboard() {
     return createBrowserClient(url, key);
   });
 
+  const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [members, setMembers] = useState<Profile[]>([]);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [currentAdmin, setCurrentAdmin] =
+    useState<TeamMember | null>(null);
+
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -143,71 +97,327 @@ export default function AdminDashboard() {
     setMessage("");
 
     try {
+      // --------------------------------------------------------
+      // CURRENT AUTH USER
+      // --------------------------------------------------------
+
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) {
+      if (userError || !user) {
         console.error("AUTH USER ERROR:", userError);
         window.location.href = "/";
         return;
       }
 
-      if (!user) {
-        window.location.href = "/";
-        return;
-      }
-
       // --------------------------------------------------------
-      // CURRENT ADMIN PROFILE
+      // CURRENT PROFILE
       // --------------------------------------------------------
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("member_id, full_name, email, role")
-        .eq("id", user.id)
-        .single();
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select("member_id, full_name, email")
+          .eq("id", user.id)
+          .single();
 
       if (profileError || !profile) {
         console.error("PROFILE ERROR:", profileError);
-        setMessage("Unable to load your project profile.");
-        return;
-      }
 
-      if (profile.role !== "admin") {
-        window.location.href = "/team";
+        setMessage(
+          `Unable to load your profile: ${
+            profileError?.message || "Profile not found."
+          }`
+        );
+
         return;
       }
 
       // --------------------------------------------------------
-      // LOAD REGISTERED MEMBERS
+      // FIND PROJECTS WHERE THIS MEMBER IS PROJECT ADMIN
       // --------------------------------------------------------
 
-      const { data: memberData, error: memberError } = await supabase
-        .from("profiles")
-        .select("member_id, full_name, email, role")
-        .eq("role", "team")
-        .order("member_id");
+      const {
+        data: adminMemberships,
+        error: adminError,
+      } = await supabase
+        .from("project_member_directory")
+        .select(
+          `
+          id,
+          member_id,
+          full_name,
+          email,
+          project_role,
+          is_project_admin,
+          project_id
+          `
+        )
+        .eq("member_id", profile.member_id)
+        .eq("is_project_admin", true);
+
+      if (adminError) {
+        console.error("ADMIN MEMBERSHIP ERROR:", adminError);
+
+        setMessage(
+          `Unable to verify project administration: ${adminError.message}`
+        );
+
+        return;
+      }
+
+      if (!adminMemberships || adminMemberships.length === 0) {
+        setMessage(
+          "You are not assigned as a project administrator."
+        );
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // SELECT PROJECT
+      // --------------------------------------------------------
+
+      const storedProjectId =
+        typeof window !== "undefined"
+          ? localStorage.getItem("selectedProjectId")
+          : null;
+
+      let selectedMembership = adminMemberships[0];
+
+      if (storedProjectId) {
+        const matchingMembership = adminMemberships.find(
+          (item) =>
+            String(item.project_id) === storedProjectId
+        );
+
+        if (matchingMembership) {
+          selectedMembership = matchingMembership;
+        }
+      }
+
+      const selectedProjectId = Number(
+        selectedMembership.project_id
+      );
+
+      console.log("ADMIN MEMBERSHIPS:", adminMemberships);
+      console.log("STORED PROJECT ID:", storedProjectId);
+      console.log("SELECTED PROJECT ID:", selectedProjectId);
+
+      if (!Number.isFinite(selectedProjectId)) {
+        setMessage(
+          "Invalid project ID for the current administrator."
+        );
+        return;
+      }
+
+      // Save project context
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          "selectedProjectId",
+          String(selectedProjectId)
+        );
+      }
+
+      // --------------------------------------------------------
+      // CURRENT ADMIN
+      // --------------------------------------------------------
+
+      setCurrentAdmin({
+        id: selectedMembership.id,
+        member_id: selectedMembership.member_id,
+        full_name: selectedMembership.full_name,
+        email: selectedMembership.email,
+        project_role: selectedMembership.project_role,
+        is_project_admin:
+          selectedMembership.is_project_admin,
+        project_id: selectedMembership.project_id,
+      });
+
+      // --------------------------------------------------------
+      // LOAD PROJECT
+      // --------------------------------------------------------
+
+      const {
+        data: projectData,
+        error: projectError,
+      } = await supabase
+        .from("projects")
+        .select(
+          "id, project_code, project_name, reference, pi_name"
+        )
+        .eq("id", selectedProjectId)
+        .maybeSingle();
+
+      console.log("PROJECT DATA:", projectData);
+      console.log(
+        "PROJECT ERROR MESSAGE:",
+        projectError?.message
+      );
+      console.log(
+        "PROJECT ERROR DETAILS:",
+        projectError?.details
+      );
+      console.log(
+        "PROJECT ERROR HINT:",
+        projectError?.hint
+      );
+      console.log(
+        "PROJECT ERROR CODE:",
+        projectError?.code
+      );
+
+      if (projectError || !projectData) {
+        console.error("PROJECT ERROR:", projectError);
+
+        setMessage(
+          `Unable to load project: ${
+            projectError?.message ||
+            projectError?.details ||
+            "Project could not be loaded."
+          }`
+        );
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // MAP DATABASE PROJECT TO FRONTEND PROJECT
+      // --------------------------------------------------------
+
+      const loadedProject: Project = {
+        id: Number(projectData.id),
+        project_code:
+          projectData.project_code ?? "",
+        project_name:
+          projectData.project_name ??
+          "AI4Groundwater",
+        reference:
+          projectData.reference ?? "",
+        pi_name:
+          projectData.pi_name ?? "",
+      };
+
+      setProject(loadedProject);
+
+      // --------------------------------------------------------
+      // LOAD PROJECT MEMBERS
+      // --------------------------------------------------------
+
+      const {
+        data: memberData,
+        error: memberError,
+      } = await supabase
+        .from("project_member_directory")
+        .select(
+          `
+          id,
+          member_id,
+          full_name,
+          email,
+          project_role,
+          is_project_admin,
+          project_id
+          `
+        )
+        .eq("project_id", selectedProjectId)
+        .order("member_id", {
+          ascending: true,
+        });
 
       if (memberError) {
         console.error("MEMBERS ERROR:", memberError);
-      } else {
-        setMembers(memberData ?? []);
+
+        setMessage(
+          `Unable to load project members: ${memberError.message}`
+        );
+
+        return;
       }
 
+      const projectMembers =
+        (memberData ?? []) as TeamMember[];
+
       // --------------------------------------------------------
-      // LOAD TASKS
+      // CHECK REGISTRATION STATUS
       // --------------------------------------------------------
 
-      await loadTasks();
+      const memberIds = projectMembers.map(
+        (member) => member.member_id
+      );
+
+      let registeredMemberIds = new Set<string>();
+
+      if (memberIds.length > 0) {
+        const {
+          data: registeredProfiles,
+          error: registeredError,
+        } = await supabase
+          .from("profiles")
+          .select("member_id")
+          .in("member_id", memberIds);
+
+        if (registeredError) {
+          console.error(
+            "REGISTRATION STATUS ERROR:",
+            registeredError
+          );
+
+          setMessage(
+            `Unable to check registration status: ${registeredError.message}`
+          );
+
+          return;
+        }
+
+        registeredMemberIds = new Set(
+          (registeredProfiles ?? []).map(
+            (profile) => profile.member_id
+          )
+        );
+      }
+
+      const projectMembersWithStatus: TeamMember[] =
+        projectMembers.map((member) => ({
+          ...member,
+          is_registered: registeredMemberIds.has(
+            member.member_id
+          ),
+        }));
+
+      setMembers(projectMembersWithStatus);
+
+      // --------------------------------------------------------
+      // DEFAULT TEAM MEMBER
+      // --------------------------------------------------------
+
+      const firstTeamMember =
+        projectMembersWithStatus.find(
+          (member) => !member.is_project_admin
+        );
+
+      setForm((current) => ({
+        ...current,
+        teamMember:
+          firstTeamMember?.member_id ?? "",
+      }));
+
+      // --------------------------------------------------------
+      // LOAD PROJECT TASKS
+      // --------------------------------------------------------
+
+      await loadTasks(selectedProjectId);
     } catch (error) {
       console.error("DASHBOARD ERROR:", error);
 
       if (error instanceof Error) {
         setMessage(error.message);
       } else {
-        setMessage("An error occurred while loading the dashboard.");
+        setMessage(
+          "An error occurred while loading the dashboard."
+        );
       }
     } finally {
       setLoading(false);
@@ -218,12 +428,16 @@ export default function AdminDashboard() {
   // LOAD TASKS
   // ============================================================
 
-  const loadTasks = async () => {
-    const { data, error } = await supabase
+  const loadTasks = async (projectId: number) => {
+    const {
+      data,
+      error,
+    } = await supabase
       .from("tasks")
       .select(
         `
         id,
+        project_id,
         member_id,
         task,
         start_date,
@@ -234,7 +448,10 @@ export default function AdminDashboard() {
         created_at
         `
       )
-      .order("created_at", { ascending: false });
+      .eq("project_id", projectId)
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (error) {
       console.error("TASK LOAD ERROR:", error);
@@ -261,18 +478,32 @@ export default function AdminDashboard() {
     setLoggingOut(true);
 
     try {
-      const { error } = await supabase.auth.signOut();
+      const { error } =
+        await supabase.auth.signOut();
 
       if (error) {
         console.error("LOGOUT ERROR:", error);
-        setMessage(`Unable to log out: ${error.message}`);
+
+        setMessage(
+          `Unable to log out: ${error.message}`
+        );
+
         return;
+      }
+
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(
+          "selectedProjectId"
+        );
       }
 
       window.location.href = "/";
     } catch (error) {
       console.error("LOGOUT ERROR:", error);
-      setMessage("An error occurred during logout.");
+
+      setMessage(
+        "An error occurred during logout."
+      );
     } finally {
       setLoggingOut(false);
     }
@@ -285,8 +516,17 @@ export default function AdminDashboard() {
   const assignTask = async () => {
     setMessage("");
 
+    if (!project) {
+      setMessage(
+        "Project information is not available."
+      );
+      return;
+    }
+
     if (!form.teamMember) {
-      setMessage("Please select a team member.");
+      setMessage(
+        "Please select a team member."
+      );
       return;
     }
 
@@ -296,51 +536,85 @@ export default function AdminDashboard() {
     }
 
     if (!form.startDate) {
-      setMessage("Please select the start date.");
+      setMessage(
+        "Please select the start date."
+      );
       return;
     }
 
     if (!form.endDate) {
-      setMessage("Please select the end date.");
+      setMessage(
+        "Please select the end date."
+      );
       return;
     }
 
     if (form.endDate < form.startDate) {
-      setMessage("End date cannot be before start date.");
+      setMessage(
+        "End date cannot be before start date."
+      );
+      return;
+    }
+
+    // --------------------------------------------------------
+    // VERIFY MEMBER
+    // --------------------------------------------------------
+
+    const selectedMember =
+      members.find(
+        (member) =>
+          member.member_id ===
+          form.teamMember
+      );
+
+    if (!selectedMember) {
+      setMessage(
+        "Selected team member was not found."
+      );
+      return;
+    }
+
+    if (selectedMember.is_project_admin) {
+      setMessage(
+        "The project administrator cannot be assigned as a team member."
+      );
       return;
     }
 
     setSaving(true);
 
     try {
-      // --------------------------------------------------------
-      // ONLY member_id IS USED
-      // --------------------------------------------------------
-
       const insertData = {
+        project_id: project.id,
         member_id: form.teamMember,
         task: form.task.trim(),
         start_date: form.startDate,
         end_date: form.endDate,
         task_status: form.taskStatus,
-        payment_status: form.paymentStatus,
+        payment_status:
+          form.paymentStatus,
         submitted_at: null,
       };
 
-      console.log("ASSIGNING TASK:", insertData);
+      console.log(
+        "ASSIGNING PROJECT TASK:",
+        insertData
+      );
 
-      const { data, error } = await supabase
+      const {
+        data,
+        error,
+      } = await supabase
         .from("tasks")
         .insert(insertData)
         .select()
         .single();
 
       if (error) {
-        console.error("ASSIGN TASK ERROR:", error);
-        console.error("MESSAGE:", error.message);
-        console.error("DETAILS:", error.details);
-        console.error("HINT:", error.hint);
-        console.error("CODE:", error.code);
+        console.error(
+          "ASSIGN TASK ERROR:",
+          error
+        );
 
         setMessage(
           `Unable to assign task: ${
@@ -354,21 +628,45 @@ export default function AdminDashboard() {
         return;
       }
 
-      console.log("TASK CREATED:", data);
+      console.log(
+        "TASK CREATED:",
+        data
+      );
 
-      setMessage("Task assigned successfully.");
+      setMessage(
+        "Task assigned successfully."
+      );
 
-      setForm(EMPTY_FORM);
+      const firstTeamMember =
+        members.find(
+          (member) =>
+            !member.is_project_admin
+        );
+
+      setForm({
+        ...EMPTY_FORM,
+        teamMember:
+          firstTeamMember?.member_id ??
+          "",
+      });
+
       setShowForm(false);
 
-      await loadTasks();
+      await loadTasks(project.id);
     } catch (error) {
-      console.error("ASSIGN TASK EXCEPTION:", error);
+      console.error(
+        "ASSIGN TASK EXCEPTION:",
+        error
+      );
 
       if (error instanceof Error) {
-        setMessage(`Unable to assign task: ${error.message}`);
+        setMessage(
+          `Unable to assign task: ${error.message}`
+        );
       } else {
-        setMessage("An error occurred while assigning the task.");
+        setMessage(
+          "An error occurred while assigning the task."
+        );
       }
     } finally {
       setSaving(false);
@@ -381,23 +679,42 @@ export default function AdminDashboard() {
 
   const updateTask = async (
     id: number,
-    field: "member_id" | "task_status" | "payment_status",
+    field:
+      | "member_id"
+      | "task_status"
+      | "payment_status",
     value: string
   ) => {
     setMessage("");
+
+    if (!project) {
+      setMessage(
+        "Project information is not available."
+      );
+      return;
+    }
 
     try {
       const updateData = {
         [field]: value,
       };
 
-      const { error } = await supabase
+      const {
+        error,
+      } = await supabase
         .from("tasks")
         .update(updateData)
-        .eq("id", id);
+        .eq("id", id)
+        .eq(
+          "project_id",
+          project.id
+        );
 
       if (error) {
-        console.error("TASK UPDATE ERROR:", error);
+        console.error(
+          "TASK UPDATE ERROR:",
+          error
+        );
 
         setMessage(
           `Unable to update task: ${
@@ -422,12 +739,19 @@ export default function AdminDashboard() {
         )
       );
     } catch (error) {
-      console.error("TASK UPDATE ERROR:", error);
+      console.error(
+        "TASK UPDATE ERROR:",
+        error
+      );
 
       if (error instanceof Error) {
-        setMessage(`Unable to update task: ${error.message}`);
+        setMessage(
+          `Unable to update task: ${error.message}`
+        );
       } else {
-        setMessage("An error occurred while updating the task.");
+        setMessage(
+          "An error occurred while updating the task."
+        );
       }
     }
   };
@@ -436,41 +760,40 @@ export default function AdminDashboard() {
   // COUNTS
   // ============================================================
 
-  const pendingCount = tasks.filter(
-    (item) => item.task_status === "Pending"
-  ).length;
+  const pendingCount =
+    tasks.filter(
+      (item) =>
+        item.task_status === "Pending"
+    ).length;
 
-  const progressCount = tasks.filter(
-    (item) => item.task_status === "In Progress"
-  ).length;
+  const progressCount =
+    tasks.filter(
+      (item) =>
+        item.task_status === "In Progress"
+    ).length;
 
-  const reviewCount = tasks.filter(
-    (item) => item.task_status === "Pending Review"
-  ).length;
+  const reviewCount =
+    tasks.filter(
+      (item) =>
+        item.task_status === "Pending Review"
+    ).length;
 
-  const completedCount = tasks.filter(
-    (item) => item.task_status === "Completed"
-  ).length;
-
-  // ============================================================
-  // GET MEMBER NAME
-  // ============================================================
-
-  const getMemberName = (memberId: string) => {
-    const directory = TEAM_DIRECTORY.find(
-      (member) => member.code === memberId
-    );
-
-    return directory?.name ?? memberId;
-  };
+  const completedCount =
+    tasks.filter(
+      (item) =>
+        item.task_status === "Completed"
+    ).length;
 
   // ============================================================
-  // REGISTERED CHECK
+  // GET MEMBER
   // ============================================================
 
-  const isRegistered = (code: string) => {
-    return members.some(
-      (profile) => profile.member_id === code
+  const getMember = (
+    memberId: string
+  ) => {
+    return members.find(
+      (member) =>
+        member.member_id === memberId
     );
   };
 
@@ -478,32 +801,53 @@ export default function AdminDashboard() {
   // RENDER
   // ============================================================
 
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-sm text-slate-500">
+          Loading project dashboard...
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50">
+
       {/* ====================================================== */}
       {/* HEADER */}
       {/* ====================================================== */}
 
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
+
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              AI4Groundwater
+              {project?.project_name ??
+                "Project"}
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              Res/AWTI/078/26
+              {project?.reference ?? ""}
             </p>
+
+            {project?.pi_name && (
+              <p className="mt-1 text-xs text-slate-400">
+                PI: {project.pi_name}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-5">
+
             <div className="text-right">
               <p className="text-sm font-semibold text-slate-900">
-                Admin
+                {currentAdmin?.full_name ??
+                  "Admin"}
               </p>
 
               <p className="text-xs text-slate-500">
-                Project Management
+                Project Administrator
               </p>
             </div>
 
@@ -513,8 +857,11 @@ export default function AdminDashboard() {
               disabled={loggingOut}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loggingOut ? "Logging out..." : "Logout"}
+              {loggingOut
+                ? "Logging out..."
+                : "Logout"}
             </button>
+
           </div>
         </div>
       </header>
@@ -524,6 +871,7 @@ export default function AdminDashboard() {
       {/* ====================================================== */}
 
       <section className="mx-auto max-w-7xl px-6 py-8">
+
         {/* MESSAGE */}
 
         {message && (
@@ -533,12 +881,63 @@ export default function AdminDashboard() {
         )}
 
         {/* ==================================================== */}
+        {/* PROJECT INFORMATION */}
+        {/* ==================================================== */}
+
+        <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Current Project
+              </p>
+
+              <p className="mt-1 text-lg font-semibold text-slate-900">
+                {project?.project_name}
+              </p>
+
+              <p className="text-sm text-slate-500">
+                {project?.reference}
+              </p>
+
+              {project?.project_code && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Project Code:{" "}
+                  {project.project_code}
+                </p>
+              )}
+            </div>
+
+            <div className="text-left sm:text-right">
+
+              <p className="text-xs text-slate-400">
+                Administrator
+              </p>
+
+              <p className="text-sm font-semibold text-slate-900">
+                {currentAdmin?.full_name}
+              </p>
+
+              <p className="text-xs text-slate-500">
+                {currentAdmin?.member_id}
+              </p>
+
+            </div>
+
+          </div>
+        </div>
+
+        {/* ==================================================== */}
         {/* STATISTICS */}
         {/* ==================================================== */}
 
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
           <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Total Tasks</p>
+            <p className="text-sm text-slate-500">
+              Total Tasks
+            </p>
 
             <p className="mt-2 text-2xl font-bold text-slate-900">
               {tasks.length}
@@ -546,7 +945,9 @@ export default function AdminDashboard() {
           </div>
 
           <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Pending</p>
+            <p className="text-sm text-slate-500">
+              Pending
+            </p>
 
             <p className="mt-2 text-2xl font-bold text-slate-900">
               {pendingCount}
@@ -582,6 +983,7 @@ export default function AdminDashboard() {
               {completedCount}
             </p>
           </div>
+
         </div>
 
         {/* ==================================================== */}
@@ -589,13 +991,14 @@ export default function AdminDashboard() {
         {/* ==================================================== */}
 
         <div className="mb-6 flex items-center justify-between">
+
           <div>
             <h2 className="text-xl font-semibold text-slate-900">
               Task Management
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Manage assigned work and payment status
+              Manage tasks and payment status for this project.
             </p>
           </div>
 
@@ -609,6 +1012,7 @@ export default function AdminDashboard() {
           >
             + Assign Task
           </button>
+
         </div>
 
         {/* ==================================================== */}
@@ -617,15 +1021,22 @@ export default function AdminDashboard() {
 
         {showForm && (
           <div className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+
             <div className="mb-5 flex items-center justify-between">
+
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
                   Assign Task
                 </h3>
 
                 <p className="mt-1 text-xs text-slate-500">
-                  All 11 project team members are available for
-                  assignment.
+                  {
+                    members.filter(
+                      (member) =>
+                        !member.is_project_admin
+                    ).length
+                  }{" "}
+                  project team members are available.
                 </p>
               </div>
 
@@ -633,7 +1044,16 @@ export default function AdminDashboard() {
                 type="button"
                 onClick={() => {
                   setShowForm(false);
-                  setForm(EMPTY_FORM);
+
+                  setForm({
+                    ...EMPTY_FORM,
+                    teamMember:
+                      members.find(
+                        (member) =>
+                          !member.is_project_admin
+                      )?.member_id ?? "",
+                  });
+
                   setMessage("");
                 }}
                 disabled={saving}
@@ -641,9 +1061,11 @@ export default function AdminDashboard() {
               >
                 Cancel
               </button>
+
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
+
               {/* TEAM MEMBER */}
 
               <div>
@@ -656,7 +1078,8 @@ export default function AdminDashboard() {
                   onChange={(e) => {
                     setForm({
                       ...form,
-                      teamMember: e.target.value,
+                      teamMember:
+                        e.target.value,
                     });
 
                     setMessage("");
@@ -664,14 +1087,20 @@ export default function AdminDashboard() {
                   disabled={saving}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
                 >
-                  {TEAM_DIRECTORY.map((member) => (
-                    <option
-                      key={member.code}
-                      value={member.code}
-                    >
-                      {member.code} — {member.name}
-                    </option>
-                  ))}
+                  {members
+                    .filter(
+                      (member) =>
+                        !member.is_project_admin
+                    )
+                    .map((member) => (
+                      <option
+                        key={member.member_id}
+                        value={member.member_id}
+                      >
+                        {member.member_id} —{" "}
+                        {member.full_name}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -685,9 +1114,10 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   value={
-                    TEAM_DIRECTORY.find(
+                    members.find(
                       (member) =>
-                        member.code === form.teamMember
+                        member.member_id ===
+                        form.teamMember
                     )?.email ?? ""
                   }
                   readOnly
@@ -730,7 +1160,8 @@ export default function AdminDashboard() {
                   onChange={(e) =>
                     setForm({
                       ...form,
-                      startDate: e.target.value,
+                      startDate:
+                        e.target.value,
                     })
                   }
                   disabled={saving}
@@ -751,7 +1182,8 @@ export default function AdminDashboard() {
                   onChange={(e) =>
                     setForm({
                       ...form,
-                      endDate: e.target.value,
+                      endDate:
+                        e.target.value,
                     })
                   }
                   disabled={saving}
@@ -778,16 +1210,22 @@ export default function AdminDashboard() {
                   disabled={saving}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
                 >
-                  <option value="Pending">Pending</option>
+                  <option value="Pending">
+                    Pending
+                  </option>
+
                   <option value="In Progress">
                     In Progress
                   </option>
+
                   <option value="Pending Review">
                     Pending Review
                   </option>
+
                   <option value="Completed">
                     Completed
                   </option>
+
                   <option value="Reassigned">
                     Reassigned
                   </option>
@@ -813,24 +1251,39 @@ export default function AdminDashboard() {
                   disabled={saving}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
                 >
-                  <option value="Pending">Pending</option>
-                  <option value="Paid">Paid</option>
+                  <option value="Pending">
+                    Pending
+                  </option>
+
+                  <option value="Paid">
+                    Paid
+                  </option>
+
+                  <option value="Denied">
+                    Denied
+                  </option>
                 </select>
               </div>
+
             </div>
 
             {/* SUBMIT */}
 
             <div className="mt-6 flex justify-end">
+
               <button
                 type="button"
                 onClick={assignTask}
                 disabled={saving}
                 className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                {saving ? "Assigning..." : "Assign Task"}
+                {saving
+                  ? "Assigning..."
+                  : "Assign Task"}
               </button>
+
             </div>
+
           </div>
         )}
 
@@ -839,10 +1292,15 @@ export default function AdminDashboard() {
         {/* ==================================================== */}
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+
           <div className="overflow-x-auto">
+
             <table className="w-full min-w-[1200px] text-left">
+
               <thead className="border-b bg-slate-50">
+
                 <tr>
+
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Team Member
                   </th>
@@ -866,213 +1324,303 @@ export default function AdminDashboard() {
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Payment Status
                   </th>
+
                 </tr>
+
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-                {loading ? (
+
+                {tasks.length === 0 ? (
+
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-5 py-12 text-center text-sm text-slate-500"
-                    >
-                      Loading tasks...
-                    </td>
-                  </tr>
-                ) : tasks.length === 0 ? (
-                  <tr>
+
                     <td
                       colSpan={6}
                       className="px-5 py-12 text-center"
                     >
+
                       <p className="text-sm font-medium text-slate-600">
                         No tasks assigned yet
                       </p>
 
                       <p className="mt-1 text-xs text-slate-400">
-                        Click &quot;+ Assign Task&quot; to create
-                        an assignment.
+                        Click &quot;+ Assign Task&quot; to create an assignment.
                       </p>
-                    </td>
-                  </tr>
-                ) : (
-                  tasks.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="transition hover:bg-slate-50"
-                    >
-                      {/* MEMBER */}
 
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col gap-1">
+                    </td>
+
+                  </tr>
+
+                ) : (
+
+                  tasks.map((item) => {
+
+                    const member =
+                      getMember(
+                        item.member_id
+                      );
+
+                    return (
+                      <tr
+                        key={item.id}
+                        className="transition hover:bg-slate-50"
+                      >
+
+                        {/* MEMBER */}
+
+                        <td className="px-5 py-4">
+
+                          <div className="flex flex-col gap-1">
+
+                            <select
+                              value={
+                                item.member_id
+                              }
+                              onChange={(e) =>
+                                updateTask(
+                                  item.id,
+                                  "member_id",
+                                  e.target.value
+                                )
+                              }
+                              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-400"
+                            >
+
+                              {members
+                                .filter(
+                                  (member) =>
+                                    !member.is_project_admin
+                                )
+                                .map(
+                                  (member) => (
+                                    <option
+                                      key={
+                                        member.member_id
+                                      }
+                                      value={
+                                        member.member_id
+                                      }
+                                    >
+                                      {
+                                        member.member_id
+                                      }
+                                    </option>
+                                  )
+                                )}
+
+                            </select>
+
+                            <span className="text-xs text-slate-500">
+                              {member?.full_name ??
+                                item.member_id}
+                            </span>
+
+                          </div>
+
+                        </td>
+
+                        {/* TASK */}
+
+                        <td className="max-w-[400px] px-5 py-4 text-sm text-slate-700">
+
+                          <div className="whitespace-pre-wrap">
+                            {item.task}
+                          </div>
+
+                        </td>
+
+                        {/* START */}
+
+                        <td className="px-5 py-4 text-sm text-slate-600">
+                          {item.start_date}
+                        </td>
+
+                        {/* END */}
+
+                        <td className="px-5 py-4 text-sm text-slate-600">
+                          {item.end_date}
+                        </td>
+
+                        {/* STATUS */}
+
+                        <td className="px-5 py-4">
+
                           <select
-                            value={item.member_id}
+                            value={
+                              item.task_status
+                            }
                             onChange={(e) =>
                               updateTask(
                                 item.id,
-                                "member_id",
+                                "task_status",
                                 e.target.value
                               )
                             }
-                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-400"
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
                           >
-                            {TEAM_DIRECTORY.map((member) => (
-                              <option
-                                key={member.code}
-                                value={member.code}
-                              >
-                                {member.code}
-                              </option>
-                            ))}
+
+                            <option value="Pending">
+                              Pending
+                            </option>
+
+                            <option value="In Progress">
+                              In Progress
+                            </option>
+
+                            <option value="Pending Review">
+                              Pending Review
+                            </option>
+
+                            <option value="Completed">
+                              Completed
+                            </option>
+
+                            <option value="Reassigned">
+                              Reassigned
+                            </option>
+
                           </select>
 
-                          <span className="text-xs text-slate-500">
-                            {getMemberName(item.member_id)}
-                          </span>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* TASK */}
+                        {/* PAYMENT */}
 
-                      <td className="max-w-[400px] px-5 py-4 text-sm text-slate-700">
-                        <div className="whitespace-pre-wrap">
-                          {item.task}
-                        </div>
-                      </td>
+                        <td className="px-5 py-4">
 
-                      {/* START */}
+                          <select
+                            value={
+                              item.payment_status
+                            }
+                            onChange={(e) =>
+                              updateTask(
+                                item.id,
+                                "payment_status",
+                                e.target.value
+                              )
+                            }
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
+                          >
 
-                      <td className="px-5 py-4 text-sm text-slate-600">
-                        {item.start_date}
-                      </td>
+                            <option value="Pending">
+                              Pending
+                            </option>
 
-                      {/* END */}
+                            <option value="Paid">
+                              Paid
+                            </option>
 
-                      <td className="px-5 py-4 text-sm text-slate-600">
-                        {item.end_date}
-                      </td>
+                            <option value="Denied">
+                              Denied
+                            </option>
 
-                      {/* STATUS */}
+                          </select>
 
-                      <td className="px-5 py-4">
-                        <select
-                          value={item.task_status}
-                          onChange={(e) =>
-                            updateTask(
-                              item.id,
-                              "task_status",
-                              e.target.value
-                            )
-                          }
-                          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
-                        >
-                          <option value="Pending">
-                            Pending
-                          </option>
+                        </td>
 
-                          <option value="In Progress">
-                            In Progress
-                          </option>
-
-                          <option value="Pending Review">
-                            Pending Review
-                          </option>
-
-                          <option value="Completed">
-                            Completed
-                          </option>
-
-                          <option value="Reassigned">
-                            Reassigned
-                          </option>
-                        </select>
-                      </td>
-
-                      {/* PAYMENT */}
-
-                      <td className="px-5 py-4">
-                        <select
-                          value={item.payment_status}
-                          onChange={(e) =>
-                            updateTask(
-                              item.id,
-                              "payment_status",
-                              e.target.value
-                            )
-                          }
-                          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
-                        >
-                          <option value="Pending">
-                            Pending
-                          </option>
-
-                          <option value="Paid">Paid</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))
+                      </tr>
+                    );
+                  })
                 )}
+
               </tbody>
+
             </table>
+
           </div>
+
         </div>
 
         {/* ==================================================== */}
-        {/* TEAM DIRECTORY */}
+        {/* PROJECT TEAM */}
         {/* ==================================================== */}
 
         <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+
           <div className="mb-5">
+
             <h3 className="text-lg font-semibold text-slate-900">
-              Team Assignment
+              Project Team
             </h3>
 
             <p className="mt-1 text-sm text-slate-500">
-              All project team members can receive tasks,
-              regardless of whether they have registered yet.
+              All members assigned to this project are shown here,
+              including members who have not registered yet.
             </p>
+
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {TEAM_DIRECTORY.map((member) => {
-              const registered = isRegistered(member.code);
+
+            {members.map((member) => {
 
               return (
                 <div
-                  key={member.code}
+                  key={member.id}
                   className="rounded-lg border border-slate-200 p-4"
                 >
+
                   <div className="flex items-center justify-between">
+
                     <span className="text-sm font-semibold text-slate-900">
-                      {member.code}
+                      {member.member_id}
                     </span>
 
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs ${
-                        registered
-                          ? "bg-slate-100 text-slate-700"
-                          : "bg-slate-50 text-slate-400"
-                      }`}
-                    >
-                      {registered
-                        ? "Registered"
-                        : "Not registered"}
-                    </span>
+                    <div className="flex gap-2">
+
+                      {member.is_project_admin && (
+                        <span className="rounded-full bg-slate-900 px-2 py-1 text-xs text-white">
+                          Admin
+                        </span>
+                      )}
+
+                      {!member.is_project_admin && (
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                          Team
+                        </span>
+                      )}
+
+                      {member.is_registered && (
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                          Registered
+                        </span>
+                      )}
+
+                      {!member.is_registered && (
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500">
+                          Not Registered
+                        </span>
+                      )}
+
+                    </div>
+
                   </div>
 
                   <p className="mt-2 text-sm font-medium text-slate-800">
-                    {member.name}
+                    {member.full_name}
                   </p>
 
                   <p className="mt-1 break-all text-xs text-slate-500">
                     {member.email}
                   </p>
+
+                  {member.is_project_admin && (
+                    <p className="mt-2 text-xs font-medium text-slate-700">
+                      Project Administrator
+                    </p>
+                  )}
+
                 </div>
               );
             })}
+
           </div>
+
         </div>
+
       </section>
+
     </main>
   );
 }
+

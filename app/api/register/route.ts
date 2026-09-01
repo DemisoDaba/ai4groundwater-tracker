@@ -16,85 +16,6 @@ const supabaseAdmin = createClient(
 );
 
 // ============================================================
-// OFFICIAL PROJECT TEAM
-// ============================================================
-
-const TEAM_MEMBERS = [
-  {
-    member_id: "P1",
-    full_name: "Demiso Daba (M.Sc) - PI",
-    email: "demisod390@gmail.com",
-    role: "admin",
-  },
-  {
-    member_id: "P1*",
-    full_name: "Mikiyas Ali",
-    email: "mikiasali333@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P2",
-    full_name: "Zelalem Anley (M.Sc)",
-    email: "zelalemanley3@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P3",
-    full_name: "Mullusew Bezabih (M.Sc)",
-    email: "bmullusew@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P4",
-    full_name: "Sintayehu Yadete (Ph.D.)",
-    email: "sintayadete5@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P5",
-    full_name: "Meron Mohammed (M.Sc)",
-    email: "meronamin23@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P6",
-    full_name: "Getachew Enssa (M.Sc)",
-    email: "getachew.enssa12@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P7",
-    full_name: "Sufiyan Abdurhman (M.Sc)",
-    email: "sufi.abdi@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P8",
-    full_name: "Aschalewu Cherie (Ph.D.)",
-    email: "aschalewc@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P9",
-    full_name: "Tafese Fitensa (M.Sc)",
-    email: "tatiyihun@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P10",
-    full_name: "Kinfe Bereda (M.Sc)",
-    email: "kinfem110@gmail.com",
-    role: "team",
-  },
-  {
-    member_id: "P11",
-    full_name: "Babur Tesfaye (M.Sc)",
-    email: "baburtesfaye@gmail.com",
-    role: "team",
-  },
-];
-
-// ============================================================
 // POST /api/register
 // ============================================================
 
@@ -129,15 +50,37 @@ export async function POST(request: NextRequest) {
       body.password || ""
     );
 
+    const project_id = Number(
+      body.project_id
+    );
+
     // --------------------------------------------------------
-    // VALIDATE PROJECT ID
+    // VALIDATE MEMBER
     // --------------------------------------------------------
 
     if (!member_id) {
       return NextResponse.json(
         {
           success: false,
-          message: "Project ID is required.",
+          message: "Member ID is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // --------------------------------------------------------
+    // VALIDATE PROJECT
+    // --------------------------------------------------------
+
+    if (
+      !Number.isInteger(project_id) ||
+      project_id <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "A valid project is required.",
         },
         { status: 400 }
       );
@@ -168,28 +111,115 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --------------------------------------------------------
-    // FIND OFFICIAL TEAM MEMBER
-    // --------------------------------------------------------
+    // ========================================================
+    // FIND MEMBER IN SELECTED PROJECT
+    // ========================================================
 
-    const member = TEAM_MEMBERS.find(
-      (person) =>
-        person.member_id === member_id
-    );
+    const {
+      data: directoryMember,
+      error: directoryError,
+    } = await supabaseAdmin
+      .from("project_member_directory")
+      .select(
+        `
+        id,
+        project_id,
+        member_id,
+        full_name,
+        email,
+        project_role,
+        is_project_admin
+        `
+      )
+      .eq("project_id", project_id)
+      .eq("member_id", member_id)
+      .maybeSingle();
 
-    if (!member) {
+    if (directoryError) {
+      console.error(
+        "DIRECTORY LOOKUP ERROR:",
+        directoryError
+      );
+
       return NextResponse.json(
         {
           success: false,
           message:
-            "Invalid project ID. Please select your assigned project ID.",
+            "Could not verify the project member.",
+          error: directoryError.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!directoryMember) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "This member is not assigned to the selected project.",
         },
         { status: 400 }
       );
     }
 
     // ========================================================
-    // CHECK WHETHER EMAIL IS ALREADY REGISTERED
+    // VERIFY PROJECT EXISTS
+    //
+    // IMPORTANT:
+    // Database columns are:
+    // project_code
+    // project_name
+    // reference
+    // pi_name
+    // ========================================================
+
+    const {
+      data: project,
+      error: projectError,
+    } = await supabaseAdmin
+      .from("projects")
+      .select(
+        "id, project_code, project_name, reference, pi_name"
+      )
+      .eq("id", project_id)
+      .maybeSingle();
+
+    if (projectError) {
+      console.error(
+        "PROJECT LOOKUP ERROR:",
+        projectError
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Unable to verify the selected project.",
+          error: projectError.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!project) {
+      console.error(
+        "PROJECT NOT FOUND:",
+        project_id
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Selected project could not be found.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ========================================================
+    // FIND EXISTING AUTH USER
     // ========================================================
 
     const {
@@ -212,6 +242,7 @@ export async function POST(request: NextRequest) {
           success: false,
           message:
             "Could not check the existing project account.",
+          error: usersError.message,
         },
         { status: 500 }
       );
@@ -221,125 +252,245 @@ export async function POST(request: NextRequest) {
       usersData.users.find(
         (user) =>
           user.email?.toLowerCase() ===
-          member.email.toLowerCase()
+          directoryMember.email.toLowerCase()
       );
+
+    let userId: string;
+
+    // ========================================================
+    // CASE 1: AUTH USER ALREADY EXISTS
+    // ========================================================
 
     if (existingUser) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "This project account is already registered. Please use Login.",
-        },
-        { status: 409 }
+      userId = existingUser.id;
+
+      console.log(
+        "EXISTING AUTH USER FOUND:",
+        userId
       );
+
+      // ------------------------------------------------------
+      // FIND EXISTING PROFILE
+      // ------------------------------------------------------
+
+      const {
+        data: existingProfile,
+        error: existingProfileError,
+      } = await supabaseAdmin
+        .from("profiles")
+        .select(
+          "id, member_id, full_name, email, role"
+        )
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (existingProfileError) {
+        console.error(
+          "EXISTING PROFILE ERROR:",
+          existingProfileError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Could not verify the existing account profile.",
+            error:
+              existingProfileError.message,
+          },
+          { status: 500 }
+        );
+      }
+
+      // ------------------------------------------------------
+      // CREATE PROFILE IF MISSING
+      // ------------------------------------------------------
+
+      if (!existingProfile) {
+        const {
+          error: createProfileError,
+        } = await supabaseAdmin
+          .from("profiles")
+          .insert({
+            id: userId,
+            member_id:
+              directoryMember.member_id,
+            full_name:
+              directoryMember.full_name,
+            email:
+              directoryMember.email,
+            role:
+              directoryMember.is_project_admin
+                ? "admin"
+                : "team",
+          });
+
+        if (createProfileError) {
+          console.error(
+            "PROFILE CREATION ERROR:",
+            createProfileError
+          );
+
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "The existing account was found, but its profile could not be created.",
+              error:
+                createProfileError.message,
+            },
+            { status: 500 }
+          );
+        }
+      }
     }
 
     // ========================================================
-    // CREATE SUPABASE AUTH ACCOUNT
+    // CASE 2: CREATE NEW AUTH USER
     // ========================================================
 
-    /*
-      IMPORTANT:
+    else {
+      const {
+        data: userData,
+        error: createUserError,
+      } =
+        await supabaseAdmin.auth.admin.createUser({
+          email: directoryMember.email,
+          password,
+          email_confirm: true,
 
-      The password below comes directly from the user.
+          user_metadata: {
+            member_id:
+              directoryMember.member_id,
 
-      There is NO temporary password.
-      There is NO generated password.
-      There is NO default password.
-    */
+            full_name:
+              directoryMember.full_name,
 
-    const {
-      data: userData,
-      error: createUserError,
-    } =
-      await supabaseAdmin.auth.admin.createUser({
-        email: member.email,
-        password: password,
-        email_confirm: true,
+            role:
+              directoryMember.is_project_admin
+                ? "admin"
+                : "team",
+          },
+        });
 
-        user_metadata: {
-          member_id: member.member_id,
-          full_name: member.full_name,
-          role: member.role,
-        },
-      });
+      if (createUserError) {
+        console.error(
+          "CREATE USER ERROR:",
+          createUserError
+        );
 
-    if (createUserError) {
-      console.error(
-        "CREATE USER ERROR:",
-        createUserError
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              createUserError.message,
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!userData.user) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Account could not be created.",
+          },
+          { status: 500 }
+        );
+      }
+
+      userId = userData.user.id;
+
+      console.log(
+        "NEW AUTH USER CREATED:",
+        userId
       );
 
-      return NextResponse.json(
-        {
-          success: false,
-          message: createUserError.message,
-        },
-        { status: 400 }
-      );
-    }
+      // ------------------------------------------------------
+      // CREATE PROFILE
+      // ------------------------------------------------------
 
-    if (!userData.user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Account could not be created.",
-        },
-        { status: 500 }
-      );
-    }
-
-    const userId = userData.user.id;
-
-    // ========================================================
-    // CREATE PROJECT PROFILE
-    // ========================================================
-
-    const { data: profile, error: profileError } =
-      await supabaseAdmin
+      const {
+        data: profile,
+        error: profileError,
+      } = await supabaseAdmin
         .from("profiles")
         .insert({
           id: userId,
-          member_id: member.member_id,
-          full_name: member.full_name,
-          email: member.email,
-          role: member.role,
+          member_id:
+            directoryMember.member_id,
+          full_name:
+            directoryMember.full_name,
+          email:
+            directoryMember.email,
+          role:
+            directoryMember.is_project_admin
+              ? "admin"
+              : "team",
         })
         .select(
           "id, member_id, full_name, email, role"
         )
         .single();
 
+      if (profileError || !profile) {
+        console.error(
+          "PROFILE CREATION ERROR:",
+          profileError
+        );
+
+        // Roll back Auth account
+        await supabaseAdmin.auth.admin.deleteUser(
+          userId
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Registration could not be completed because the project profile could not be created.",
+            error:
+              profileError?.message ||
+              "Profile creation failed.",
+          },
+          { status: 500 }
+        );
+      }
+    }
+
     // ========================================================
-    // IF PROFILE CREATION FAILS
+    // LINK USER TO SELECTED PROJECT
     // ========================================================
 
-    if (profileError || !profile) {
-      console.error(
-        "PROFILE CREATION ERROR:",
-        profileError
+    const {
+      error: projectMemberError,
+    } = await supabaseAdmin
+      .from("project_members")
+      .upsert(
+        {
+          project_id,
+          profile_id: userId,
+        },
+        {
+          onConflict:
+            "project_id,profile_id",
+        }
       );
 
-      /*
-        The Auth account was already created.
-        Delete it so registration does not leave
-        a broken account behind.
-      */
-
-      await supabaseAdmin.auth.admin.deleteUser(
-        userId
+    if (projectMemberError) {
+      console.error(
+        "PROJECT MEMBER LINK ERROR:",
+        projectMemberError
       );
 
       return NextResponse.json(
         {
           success: false,
           message:
-            "Registration could not be completed because the project profile could not be created.",
+            "The account was created, but it could not be linked to the selected project.",
           error:
-            profileError?.message ||
-            "Profile creation failed.",
+            projectMemberError.message,
         },
         { status: 500 }
       );
@@ -352,14 +503,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
+
         message:
           "Registration successful. You can now log in using the password you created.",
+
         user: {
           id: userId,
-          member_id: member.member_id,
-          full_name: member.full_name,
-          email: member.email,
-          role: member.role,
+
+          member_id:
+            directoryMember.member_id,
+
+          full_name:
+            directoryMember.full_name,
+
+          email:
+            directoryMember.email,
+
+          project_id,
+
+          project_code:
+            project.project_code,
+
+          project_name:
+            project.project_name,
+
+          project_reference:
+            project.reference,
+
+          role:
+            directoryMember.is_project_admin
+              ? "admin"
+              : "team",
         },
       },
       { status: 201 }

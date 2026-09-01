@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -37,7 +38,7 @@ export default function TeamTopNav({ name, code }: TeamTopNavProps) {
           <div className="flex h-full items-center bg-slate-900 pl-8 pr-[22px] py-5">
             <div>
               <h1 className="text-3xl font-bold text-white">AI4Groundwater</h1>
-              <p className="mt-0.5 text-[11px] text-slate-300">Res/AWTI/078/26</p>
+              <p className="mt-0.5 text-[11px] text-slate-300">{code ?? ""}</p>
             </div>
           </div>
 
@@ -82,7 +83,7 @@ export default function TeamTopNav({ name, code }: TeamTopNavProps) {
                 AI4Groundwater
               </h1>
               <p className="truncate text-[9px] text-slate-300">
-                Res/AWTI/078/26
+                {code ?? ""}
               </p>
             </div>
           </div>
@@ -139,3 +140,4 @@ export default function TeamTopNav({ name, code }: TeamTopNavProps) {
     </>
   );
 }
+
