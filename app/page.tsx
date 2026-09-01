@@ -1,3 +1,4 @@
+
 "use client";
 
 import { FormEvent, useState } from "react";
@@ -156,8 +157,6 @@ export default function Home() {
 
       if (mode === "register") {
         /*
-          IMPORTANT:
-
           Registration is handled by:
 
               /api/register
@@ -318,295 +317,445 @@ export default function Home() {
     }
   };
 
+  // ============================================================
+  // PAGE
+  // ============================================================
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-10">
-      <div className="w-full max-w-md">
+    <main className="min-h-screen bg-slate-50">
+
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col lg:flex-row">
 
         {/* ================================================== */}
-        {/* PROJECT HEADER */}
+        {/* LEFT SIDE — PROJECT INFORMATION                    */}
         {/* ================================================== */}
 
-        <div className="mb-8 text-center">
+        <section className="flex flex-1 items-center px-8 py-12 sm:px-12 lg:px-16">
 
-          <h1 className="text-3xl font-bold text-slate-900">
-            AI4Groundwater
-          </h1>
+          <div className="mx-auto w-full max-w-xl">
 
-          <p className="mt-2 text-sm text-slate-500">
-            Res/AWTI/078/26
-          </p>
+            {/* PROJECT BRAND */}
 
-          <p className="mt-4 text-sm text-slate-600">
-            Project Work & Finance Management
-          </p>
+            <div className="mb-8 flex items-center gap-3">
 
-        </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white shadow-sm">
+                AI
+              </div>
 
-        {/* ================================================== */}
-        {/* CARD */}
-        {/* ================================================== */}
+              <div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                <p className="text-base font-semibold text-slate-900">
+                  AI4Groundwater
+                </p>
 
-          {/* ================================================= */}
-          {/* LOGIN / REGISTER */}
-          {/* ================================================= */}
+                <p className="text-xs text-slate-500">
+                  Project Management System
+                </p>
 
-          <div className="mb-7 grid grid-cols-2 rounded-lg bg-slate-100 p-1">
+              </div>
 
-            <button
-              type="button"
-              onClick={() => changeMode("login")}
-              disabled={loading}
-              className={`rounded-md py-2.5 text-sm font-medium transition ${
-                mode === "login"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              Login
-            </button>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => changeMode("register")}
-              disabled={loading}
-              className={`rounded-md py-2.5 text-sm font-medium transition ${
-                mode === "register"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              Register
-            </button>
 
-          </div>
+            {/* MAIN HEADING */}
 
-          {/* ================================================= */}
-          {/* TITLE */}
-          {/* ================================================= */}
+            <h1 className="text-4xl font-bold leading-tight tracking-tight text-slate-900 sm:text-5xl">
 
-          <div className="mb-7">
+              Data.
+              <br />
 
-            <h2 className="text-xl font-semibold text-slate-900">
-              {mode === "login"
-                ? "Team Login"
-                : "Team Registration"}
-            </h2>
+              Science.
+              <br />
 
-            <p className="mt-1 text-sm text-slate-500">
-              {mode === "login"
-                ? "Select your project ID and enter your password."
-                : "Select your project ID and create your own password."}
+              <span className="text-slate-500">
+                Groundwater.
+              </span>
+
+            </h1>
+
+
+            {/* DESCRIPTION */}
+
+            <p className="mt-6 max-w-lg text-base leading-7 text-slate-600">
+
+              An integrated project workspace for coordinating
+              research activities, tasks, team members, finances,
+              and groundwater-related scientific work.
+
+            </p>
+
+
+            {/* PROJECT INFORMATION */}
+
+            <div className="mt-10 grid max-w-lg grid-cols-1 gap-3 sm:grid-cols-2">
+
+              {/* PROJECT */}
+
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Project
+                </p>
+
+                <p className="mt-2 text-sm font-semibold text-slate-800">
+                  AI4Groundwater
+                </p>
+
+              </div>
+
+
+              {/* REFERENCE */}
+
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Reference
+                </p>
+
+                <p className="mt-2 text-sm font-semibold text-slate-800">
+                  Res/AWTI/078/26
+                </p>
+
+              </div>
+
+            </div>
+
+
+            {/* MOTTO */}
+
+            <div className="mt-10 border-l-2 border-slate-300 pl-5">
+
+              <p className="text-sm font-medium leading-6 text-slate-700">
+
+                “Turning groundwater data into knowledge,
+                knowledge into decisions, and decisions into
+                sustainable water management.”
+
+              </p>
+
+            </div>
+
+
+            {/* LEFT FOOTER */}
+
+            <p className="mt-12 text-xs text-slate-400">
+
+              AI4Groundwater Research Project
+
             </p>
 
           </div>
 
-          {/* ================================================= */}
-          {/* FORM */}
-          {/* ================================================= */}
+        </section>
 
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-5"
-          >
+
+        {/* ================================================== */}
+        {/* RIGHT SIDE — LOGIN / REGISTER                       */}
+        {/* ================================================== */}
+
+        <section className="flex flex-1 items-center justify-center px-6 py-10 sm:px-10 lg:border-l lg:border-slate-200 lg:px-16">
+
+          <div className="w-full max-w-md">
+
 
             {/* ================================================= */}
-            {/* TEAM MEMBER */}
+            {/* LOGIN CARD                                         */}
             {/* ================================================= */}
 
-            <div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
 
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Team Member
-              </label>
 
-              <select
-                value={selectedMember}
-                onChange={(e) => {
-                  setSelectedMember(e.target.value);
-                  setMessage("");
-                  setPassword("");
-                  setConfirmPassword("");
-                }}
-                disabled={loading}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+              {/* LOGIN / REGISTER SWITCH */}
+
+              <div className="mb-7 grid grid-cols-2 rounded-lg bg-slate-100 p-1">
+
+                <button
+                  type="button"
+                  onClick={() => changeMode("login")}
+                  disabled={loading}
+                  className={`rounded-md py-2.5 text-sm font-medium transition ${
+                    mode === "login"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  Login
+                </button>
+
+
+                <button
+                  type="button"
+                  onClick={() => changeMode("register")}
+                  disabled={loading}
+                  className={`rounded-md py-2.5 text-sm font-medium transition ${
+                    mode === "register"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  Register
+                </button>
+
+              </div>
+
+
+              {/* TITLE */}
+
+              <div className="mb-7">
+
+                <h2 className="text-xl font-semibold text-slate-900">
+
+                  {mode === "login"
+                    ? "Welcome back"
+                    : "Create your account"}
+
+                </h2>
+
+
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+
+                  {mode === "login"
+                    ? "Select your project ID and enter your password."
+                    : "Select your project ID and create your own password."}
+
+                </p>
+
+              </div>
+
+
+              {/* ================================================= */}
+              {/* FORM                                               */}
+              {/* ================================================= */}
+
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-5"
               >
 
-                <option value="">
-                  Select your ID
-                </option>
 
-                {teamMembers.map((member) => (
-                  <option
-                    key={member.code}
-                    value={member.code}
+                {/* TEAM MEMBER */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+
+                    Team Member
+
+                  </label>
+
+
+                  <select
+                    value={selectedMember}
+                    onChange={(e) => {
+                      setSelectedMember(e.target.value);
+                      setMessage("");
+                      setPassword("");
+                      setConfirmPassword("");
+                    }}
+                    disabled={loading}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
-                    {member.code} — {member.name}
-                  </option>
-                ))}
 
-              </select>
+                    <option value="">
+                      Select your project ID
+                    </option>
 
-            </div>
 
-            {/* ================================================= */}
-            {/* SELECTED MEMBER */}
-            {/* ================================================= */}
+                    {teamMembers.map((member) => (
+                      <option
+                        key={member.code}
+                        value={member.code}
+                      >
+                        {member.code} — {member.name}
+                      </option>
+                    ))}
 
-            {selectedPerson && (
-              <div className="rounded-lg bg-slate-50 p-4">
+                  </select>
 
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                  Name
-                </p>
+                </div>
 
-                <p className="mt-1 text-sm font-medium text-slate-800">
-                  {selectedPerson.name}
-                </p>
 
-                <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">
-                  Registered Email
-                </p>
+                {/* ================================================= */}
+                {/* SELECTED MEMBER                                    */}
+                {/* ================================================= */}
 
-                <p className="mt-1 text-sm font-medium text-slate-800">
-                  {selectedPerson.email}
-                </p>
+                {selectedPerson && (
 
-                <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">
-                  Project ID
-                </p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
 
-                <p className="mt-1 text-sm font-semibold text-slate-800">
-                  {selectedPerson.code}
-                </p>
+                    <div className="grid grid-cols-[90px_1fr] gap-y-3 text-sm">
 
-              </div>
-            )}
+                      <span className="text-slate-400">
+                        Name
+                      </span>
 
-            {/* ================================================= */}
-            {/* PASSWORD */}
-            {/* ================================================= */}
+                      <span className="font-medium text-slate-800">
+                        {selectedPerson.name}
+                      </span>
 
-            <div>
 
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                {mode === "register"
-                  ? "Create Password"
-                  : "Password"}
-              </label>
+                      <span className="text-slate-400">
+                        Email
+                      </span>
 
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setMessage("");
-                }}
-                placeholder={
-                  mode === "register"
-                    ? "Create your password"
-                    : "Enter your password"
-                }
-                disabled={loading}
-                autoComplete={
-                  mode === "register"
-                    ? "new-password"
-                    : "current-password"
-                }
-                minLength={6}
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
-              />
+                      <span className="break-all font-medium text-slate-800">
+                        {selectedPerson.email}
+                      </span>
 
-            </div>
 
-            {/* ================================================= */}
-            {/* CONFIRM PASSWORD */}
-            {/* ================================================= */}
+                      <span className="text-slate-400">
+                        Project ID
+                      </span>
 
-            {mode === "register" && (
-              <div>
+                      <span className="font-semibold text-slate-800">
+                        {selectedPerson.code}
+                      </span>
 
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Confirm Password
-                </label>
+                    </div>
 
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    setMessage("");
-                  }}
-                  placeholder="Confirm your password"
+                  </div>
+
+                )}
+
+
+                {/* ================================================= */}
+                {/* PASSWORD                                           */}
+                {/* ================================================= */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+
+                    {mode === "register"
+                      ? "Create Password"
+                      : "Password"}
+
+                  </label>
+
+
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setMessage("");
+                    }}
+                    placeholder={
+                      mode === "register"
+                        ? "Create your password"
+                        : "Enter your password"
+                    }
+                    disabled={loading}
+                    autoComplete={
+                      mode === "register"
+                        ? "new-password"
+                        : "current-password"
+                    }
+                    minLength={6}
+                    className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  />
+
+                </div>
+
+
+                {/* ================================================= */}
+                {/* CONFIRM PASSWORD                                    */}
+                {/* ================================================= */}
+
+                {mode === "register" && (
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+
+                      Confirm Password
+
+                    </label>
+
+
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        setMessage("");
+                      }}
+                      placeholder="Confirm your password"
+                      disabled={loading}
+                      autoComplete="new-password"
+                      minLength={6}
+                      className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    />
+
+                  </div>
+
+                )}
+
+
+                {/* ================================================= */}
+                {/* MESSAGE                                            */}
+                {/* ================================================= */}
+
+                {message && (
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-5 text-slate-700">
+
+                    {message}
+
+                  </div>
+
+                )}
+
+
+                {/* ================================================= */}
+                {/* SUBMIT BUTTON                                      */}
+                {/* ================================================= */}
+
+                <button
+                  type="submit"
                   disabled={loading}
-                  autoComplete="new-password"
-                  minLength={6}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
-                />
+                  className="w-full rounded-lg bg-slate-900 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
 
-              </div>
-            )}
+                  {loading
+                    ? mode === "register"
+                      ? "Creating account..."
+                      : "Signing in..."
+                    : mode === "register"
+                    ? "Create Account"
+                    : "Login"}
+
+                </button>
+
+
+              </form>
+
+            </div>
+
 
             {/* ================================================= */}
-            {/* MESSAGE */}
+            {/* INFORMATION                                         */}
             {/* ================================================= */}
 
-            {message && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-5 text-slate-700">
-                {message}
-              </div>
-            )}
+            <div className="mt-5 px-3">
 
-            {/* ================================================= */}
-            {/* BUTTON */}
-            {/* ================================================= */}
+              <p className="text-center text-xs leading-5 text-slate-400">
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-slate-900 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-            >
+                {mode === "register"
+                  ? "Your project ID, name, and registered email are assigned by the project. You create and control your own password."
+                  : "Use the password you created during registration. If you cannot log in, contact the project administrator."}
 
-              {loading
-                ? mode === "register"
-                  ? "Creating account..."
-                  : "Signing in..."
-                : mode === "register"
-                ? "Create Account"
-                : "Login"}
+              </p>
 
-            </button>
+            </div>
 
-          </form>
 
-        </div>
+          </div>
 
-        {/* ================================================== */}
-        {/* INFORMATION */}
-        {/* ================================================== */}
-
-        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
-
-          <p className="text-center text-xs leading-5 text-slate-500">
-
-            {mode === "register"
-              ? "Your project ID, name, and registered email are assigned by the project. You create and control your own password."
-              : "Use the password you created during registration. If you cannot log in, contact the project administrator."}
-
-          </p>
-
-        </div>
-
-        {/* ================================================== */}
-        {/* FOOTER */}
-        {/* ================================================== */}
-
-        <p className="mt-6 text-center text-xs text-slate-400">
-          AI4Groundwater Project Management System
-        </p>
+        </section>
 
       </div>
+
     </main>
   );
 }
