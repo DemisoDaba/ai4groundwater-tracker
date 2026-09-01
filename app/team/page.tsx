@@ -150,7 +150,6 @@ export default function TeamDashboard() {
 
       if (error) {
         console.error("SUBMIT TASK ERROR:", error);
-        // Fixed: Using string concatenation instead of template literal
         alert("Unable to submit task: " + error.message);
         return;
       }
@@ -209,11 +208,26 @@ export default function TeamDashboard() {
             <p className="mt-1 text-sm text-slate-500">Res/AWTI/078/26</p>
           </div>
 
-          <div className="flex items-center gap-5">
-            <div className="text-right">
-              <p className="text-sm font-semibold text-slate-900">Team Dashboard</p>
-              <p className="text-xs text-slate-500">{currentUser?.code ?? ""}</p>
+          {/* Updated header section with Ground Rules button */}
+          <div className="flex items-center gap-3">
+            <div className="text-right mr-2">
+              <p className="text-sm font-semibold text-slate-900">
+                Team Dashboard
+              </p>
+              <p className="text-xs text-slate-500">
+                {currentUser?.code ?? ""}
+              </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/rules";
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+            >
+              Ground Rules
+            </button>
 
             <button
               type="button"
