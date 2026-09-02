@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -22,6 +21,7 @@ type Task = {
   end_date: string;
   task_status: TaskStatus;
   payment_status: PaymentStatus;
+  remark: string | null;
   submitted_at: string | null;
   created_at?: string;
 };
@@ -52,6 +52,7 @@ const EMPTY_FORM = {
   endDate: "",
   taskStatus: "Pending" as TaskStatus,
   paymentStatus: "Pending" as PaymentStatus,
+  remark: "",
 };
 
 export default function AdminDashboard() {
@@ -444,6 +445,7 @@ export default function AdminDashboard() {
         end_date,
         task_status,
         payment_status,
+        remark,
         submitted_at,
         created_at
         `
@@ -593,6 +595,7 @@ export default function AdminDashboard() {
         task_status: form.taskStatus,
         payment_status:
           form.paymentStatus,
+        remark: form.remark.trim() || null,
         submitted_at: null,
       };
 
@@ -682,7 +685,8 @@ export default function AdminDashboard() {
     field:
       | "member_id"
       | "task_status"
-      | "payment_status",
+      | "payment_status"
+      | "remark",
     value: string
   ) => {
     setMessage("");
@@ -696,7 +700,10 @@ export default function AdminDashboard() {
 
     try {
       const updateData = {
-        [field]: value,
+        [field]:
+          field === "remark"
+            ? value.trim() || null
+            : value,
       };
 
       const {
@@ -733,7 +740,10 @@ export default function AdminDashboard() {
           item.id === id
             ? {
                 ...item,
-                [field]: value,
+                [field]:
+                  field === "remark"
+                    ? value.trim() || null
+                    : value,
               }
             : item
         )
@@ -1265,6 +1275,28 @@ export default function AdminDashboard() {
                 </select>
               </div>
 
+              {/* REMARK */}
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Remark
+                </label>
+
+                <textarea
+                  value={form.remark}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      remark: e.target.value,
+                    })
+                  }
+                  disabled={saving}
+                  placeholder="Write the reason or payment remark..."
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
+                />
+              </div>
+
             </div>
 
             {/* SUBMIT */}
@@ -1325,6 +1357,10 @@ export default function AdminDashboard() {
                     Payment Status
                   </th>
 
+                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Remark
+                  </th>
+
                 </tr>
 
               </thead>
@@ -1336,7 +1372,7 @@ export default function AdminDashboard() {
                   <tr>
 
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-5 py-12 text-center"
                     >
 
@@ -1518,6 +1554,39 @@ export default function AdminDashboard() {
 
                         </td>
 
+                        {/* REMARK */}
+
+                        <td className="px-5 py-4">
+
+                          <textarea
+                            value={item.remark ?? ""}
+                            onChange={(e) =>
+                              setTasks((current) =>
+                                current.map((task) =>
+                                  task.id === item.id
+                                    ? {
+                                        ...task,
+                                        remark:
+                                          e.target.value,
+                                      }
+                                    : task
+                                )
+                              )
+                            }
+                            onBlur={(e) =>
+                              updateTask(
+                                item.id,
+                                "remark",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Add remark..."
+                            rows={3}
+                            className="w-full min-w-[220px] resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400"
+                          />
+
+                        </td>
+
                       </tr>
                     );
                   })
@@ -1623,4 +1692,3 @@ export default function AdminDashboard() {
     </main>
   );
 }
-

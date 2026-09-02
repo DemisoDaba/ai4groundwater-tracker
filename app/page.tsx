@@ -1,4 +1,3 @@
-
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
@@ -545,7 +544,7 @@ export default function Home() {
         </section>
 
         {/* ================================================== */}
-        {/* RIGHT SIDE — LOGIN / REGISTER                       */}
+        {/* RIGHT SIDE — LOGIN / REGISTER                     */}
         {/* ================================================== */}
 
         <section className="flex flex-1 items-center justify-center px-6 py-10 sm:px-10 lg:border-l lg:border-slate-200 lg:px-16">
@@ -810,6 +809,23 @@ export default function Home() {
                 </div>
 
                 {/* ================================================= */}
+                {/* FORGOT PASSWORD                                    */}
+                {/* ================================================= */}
+
+                {mode === "login" && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => router.push("/reset-password")}
+                      disabled={loading}
+                      className="text-xs font-medium text-slate-500 transition hover:text-slate-900"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
+
+                {/* ================================================= */}
                 {/* CONFIRM PASSWORD                                    */}
                 {/* ================================================= */}
 
@@ -923,4 +939,3 @@ export default function Home() {
     </main>
   );
 }
-

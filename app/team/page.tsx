@@ -22,6 +22,7 @@ type Task = {
   end_date: string;
   task_status: TaskStatus;
   payment_status: PaymentStatus;
+  remark: string | null;
   submitted_at: string | null;
 };
 
@@ -63,7 +64,6 @@ export default function TeamDashboard() {
         return;
       }
 
-      // Get the project selected during login
       const storedProjectId = localStorage.getItem("selectedProjectId");
 
       if (!storedProjectId) {
@@ -80,7 +80,6 @@ export default function TeamDashboard() {
         return;
       }
 
-      // Load authenticated user's profile
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("member_id, full_name, email")
@@ -93,10 +92,6 @@ export default function TeamDashboard() {
         return;
       }
 
-      /*
-       * Verify this user belongs to the selected project
-       * and get project-specific admin status.
-       */
       const { data: projectMember, error: projectMemberError } =
         await supabase
           .from("project_member_directory")
@@ -119,20 +114,11 @@ export default function TeamDashboard() {
         return;
       }
 
-      /*
-       * IMPORTANT:
-       * Do NOT use profiles.role.
-       *
-       * Admin status is determined by:
-       * project_member_directory.is_project_admin
-       */
-
       if (projectMember.is_project_admin === true) {
         window.location.href = "/admin";
         return;
       }
 
-      // Load selected project
       const { data: projectData, error: projectError } = await supabase
         .from("projects")
         .select("id, project_code, project_name, reference, pi_name")
@@ -165,7 +151,7 @@ export default function TeamDashboard() {
     const { data, error } = await supabase
       .from("tasks")
       .select(
-        "id, member_id, task, start_date, end_date, task_status, payment_status, submitted_at"
+        "id, member_id, task, start_date, end_date, task_status, payment_status, remark, submitted_at"
       )
       .eq("member_id", memberId)
       .eq("project_id", projectId)
@@ -437,7 +423,11 @@ export default function TeamDashboard() {
               </p>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {/*
+             * DESKTOP TABLE
+             * Hidden on small screens.
+             */}
+            <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[950px] text-left">
                   <thead className="border-b border-slate-200 bg-slate-50">
@@ -445,20 +435,29 @@ export default function TeamDashboard() {
                       <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Task
                       </th>
+
                       <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Start Date
                       </th>
+
                       <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         End Date
                       </th>
+
                       <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Task Status
                       </th>
+
                       <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Payment Status
                       </th>
+
                       <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Action
+                      </th>
+
+                      <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Remark
                       </th>
                     </tr>
                   </thead>
@@ -467,7 +466,7 @@ export default function TeamDashboard() {
                     {loading ? (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="px-5 py-14 text-center text-sm text-slate-500"
                         >
                           Loading your tasks...
@@ -475,7 +474,7 @@ export default function TeamDashboard() {
                       </tr>
                     ) : tasks.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-5 py-14 text-center">
+                        <td colSpan={7} className="px-5 py-14 text-center">
                           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-xl">
                             📋
                           </div>
@@ -554,12 +553,163 @@ export default function TeamDashboard() {
                               </button>
                             )}
                           </td>
+
+                          <td className="px-5 py-5">
+                            <div className="min-w-[260px] rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 shadow-sm">
+                              <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                                Admin Remark
+                              </p>
+
+                              <p className="mt-1 text-sm font-semibold leading-6 text-blue-900 whitespace-pre-wrap">
+                                {task.remark || "No remark provided."}
+                              </p>
+                            </div>
+                          </td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/*
+             * MOBILE TASK CARDS
+             * Shown only on small screens.
+             */}
+            <div className="space-y-4 md:hidden">
+              {loading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white px-5 py-14 text-center shadow-sm">
+                  <p className="text-sm text-slate-500">
+                    Loading your tasks...
+                  </p>
+                </div>
+              ) : tasks.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-white px-5 py-14 text-center shadow-sm">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-xl">
+                    📋
+                  </div>
+
+                  <p className="mt-4 text-sm font-semibold text-slate-700">
+                    No assigned work
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Your assigned tasks will appear here.
+                  </p>
+                </div>
+              ) : (
+                tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Task
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-900">
+                        {task.task}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Start Date
+                        </p>
+
+                        <p className="mt-1 text-sm font-medium text-slate-700">
+                          {task.start_date}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          End Date
+                        </p>
+
+                        <p className="mt-1 text-sm font-medium text-slate-700">
+                          {task.end_date}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Task Status
+                        </p>
+
+                        <span
+                          className={
+                            "inline-flex rounded-full px-3 py-1.5 text-xs font-semibold " +
+                            getStatusClass(task.task_status)
+                          }
+                        >
+                          {task.task_status}
+                        </span>
+                      </div>
+
+                      <div>
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Payment Status
+                        </p>
+
+                        <span
+                          className={
+                            "inline-flex rounded-full px-3 py-1.5 text-xs font-semibold " +
+                            getPaymentClass(task.payment_status)
+                          }
+                        >
+                          {task.payment_status}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 border-t border-slate-100 pt-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Action
+                      </p>
+
+                      {task.task_status === "Pending Review" ||
+                      task.submitted_at ? (
+                        <span className="inline-flex rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                          Submitted
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => submitTask(task.id)}
+                          disabled={
+                            submittingId === task.id ||
+                            task.task_status === "Completed" ||
+                            task.task_status === "Reassigned"
+                          }
+                          className="w-full rounded-lg bg-slate-900 px-4 py-3 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          {submittingId === task.id
+                            ? "Submitting..."
+                            : "Submit Task"}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-5">
+                      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 shadow-sm">
+                        <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                          Admin Remark
+                        </p>
+
+                        <p className="mt-1 text-sm font-semibold leading-6 text-blue-900 whitespace-pre-wrap">
+                          {task.remark || "No remark provided."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
