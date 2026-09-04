@@ -6,7 +6,7 @@ import "./kulfogw.css";
 type LocationResult = {
   latitude: number;
   longitude: number;
-  value: number | null;
+  anomaly: number | null;
   interpretation: string;
 };
 
