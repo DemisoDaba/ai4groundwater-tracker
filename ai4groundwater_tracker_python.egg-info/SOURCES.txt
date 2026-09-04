@@ -1,0 +1,7 @@
+README.md
+pyproject.toml
+ai4groundwater_tracker_python.egg-info/PKG-INFO
+ai4groundwater_tracker_python.egg-info/SOURCES.txt
+ai4groundwater_tracker_python.egg-info/dependency_links.txt
+ai4groundwater_tracker_python.egg-info/requires.txt
+ai4groundwater_tracker_python.egg-info/top_level.txt

@@ -1,0 +1,2 @@
+fastapi
+kulfo @ git+https://github.com/DemisoDaba/kulfogw.git
