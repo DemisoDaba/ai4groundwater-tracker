@@ -31,7 +31,11 @@ def location_query(request: LocationRequest):
         }
 
     except ValueError as e:
-        return {"error": str(e)}
+        return {
+            "error": str(e)
+        }
 
     except Exception as e:
-        return {"error": f"KULFO error: {str(e)}"}
+        return {
+            "error": f"KULFO error: {str(e)}"
+        }
