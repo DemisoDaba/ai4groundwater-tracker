@@ -959,15 +959,4 @@ export default function Home() {
     </main>
   );
 }
-```
-
-The **only functional addition** is the **Spatial Query** button:
-
-```tsx
-<button
-  type="button"
-  onClick={() => router.push("/kulfogw")}
->
-  ◉ Spatial Query
-</button>
 
