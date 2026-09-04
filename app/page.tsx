@@ -457,6 +457,24 @@ export default function Home() {
 
             </div>
 
+            {/* ================================================= */}
+            {/* SPATIAL QUERY                                      */}
+            {/* ================================================= */}
+
+            <button
+              type="button"
+              onClick={() => router.push("/kulfogw")}
+              className="mb-8 inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-500 hover:bg-slate-50 hover:text-slate-900"
+            >
+
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs text-white">
+                ◉
+              </span>
+
+              Spatial Query
+
+            </button>
+
             {/* MAIN HEADING */}
 
             <h1 className="text-4xl font-bold leading-tight tracking-tight text-slate-900 sm:text-5xl">
@@ -814,6 +832,7 @@ export default function Home() {
 
                 {mode === "login" && (
                   <div className="flex justify-end">
+
                     <button
                       type="button"
                       onClick={() => router.push("/reset-password")}
@@ -822,6 +841,7 @@ export default function Home() {
                     >
                       Forgot password?
                     </button>
+
                   </div>
                 )}
 
@@ -939,3 +959,15 @@ export default function Home() {
     </main>
   );
 }
+```
+
+The **only functional addition** is the **Spatial Query** button:
+
+```tsx
+<button
+  type="button"
+  onClick={() => router.push("/kulfogw")}
+>
+  ◉ Spatial Query
+</button>
+
