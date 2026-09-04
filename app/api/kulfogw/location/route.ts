@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
     }
 
     const python = process.env.KULFO_PYTHON_PATH || "python";
-    const packagePath = process.env.KULFO_PACKAGE_PATH;
+    const packagePath =
+      process.env.KULFO_PACKAGE_PATH || path.join(process.cwd(), "kulfo");
 
     if (!packagePath) {
       return NextResponse.json(
