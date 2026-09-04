@@ -876,9 +876,9 @@ export default function KulfoGWPage() {
                     </span>
 
                     <strong>
-                      {result.value === null
+                      {result.anomaly === null
                         ? "No data"
-                        : result.value.toFixed(4)}
+                        : result.anomaly.toFixed(4)}
                     </strong>
 
                   </div>
