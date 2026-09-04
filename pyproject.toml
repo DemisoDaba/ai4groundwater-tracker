@@ -6,7 +6,7 @@ dependencies = [
     "fastapi",
     "pydantic",
     "numpy",
-    "rasterio",
+    "rasterio==1.5.1",
     "matplotlib",
     "kulfo @ git+https://github.com/DemisoDaba/kulfogw.git"
 ]
