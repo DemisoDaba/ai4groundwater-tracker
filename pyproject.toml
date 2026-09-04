@@ -1,0 +1,11 @@
+[project]
+name = "ai4groundwater-tracker-python"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "kulfo @ git+https://github.com/DemisoDaba/kulfogw.git"
+]
+
+[tool.setuptools]
+py-modules = []
