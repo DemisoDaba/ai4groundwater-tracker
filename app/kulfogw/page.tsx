@@ -1,7 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import "./kulfogw.css";
+
+const Plot = dynamic(
+  () => import("react-plotly.js"),
+  {
+    ssr: false,
+  }
+);
+
+type ViewerData = {
+  gw: (number | null)[][];
+  longitude: number[];
+  latitude: number[];
+  easting: number[];
+  northing: number[];
+  height: number;
+  width: number;
+  resolution_x: number;
+  resolution_y: number;
+  crs: string;
+  bounds: {
+    left: number;
+    right: number;
+    bottom: number;
+    top: number;
+  };
+  default_row: number;
+  default_col: number;
+};
 
 type LocationResult = {
   latitude: number;
@@ -47,7 +76,8 @@ type HotspotsResult = {
 };
 
 export default function KulfoGWPage() {
-  const [activeSection, setActiveSection] = useState("overview");
+  const [activeSection, setActiveSection] =
+    useState("overview");
 
   /* =====================================================
      LOCATION QUERY
@@ -63,12 +93,23 @@ export default function KulfoGWPage() {
   const [loading, setLoading] = useState(false);
 
   /* =====================================================
-     GROUNDWATER MAP
+     INTERACTIVE VIEWER
   ====================================================== */
 
-  const [mapImage, setMapImage] = useState("");
-  const [mapLoading, setMapLoading] = useState(false);
-  const [mapError, setMapError] = useState("");
+  const [viewerData, setViewerData] =
+    useState<ViewerData | null>(null);
+
+  const [viewerLoading, setViewerLoading] =
+    useState(false);
+
+  const [viewerError, setViewerError] =
+    useState("");
+
+  const [selectedRow, setSelectedRow] =
+    useState<number | null>(null);
+
+  const [selectedCol, setSelectedCol] =
+    useState<number | null>(null);
 
   /* =====================================================
      GROUNDWATER ZONES
@@ -84,7 +125,7 @@ export default function KulfoGWPage() {
     useState("");
 
   /* =====================================================
-     HOTSPOTS & PATTERNS
+     HOTSPOTS
   ====================================================== */
 
   const [hotspots, setHotspots] =
@@ -97,7 +138,52 @@ export default function KulfoGWPage() {
     useState("");
 
   /* =====================================================
-     LOCATION QUERY FUNCTION
+     LOAD INTERACTIVE VIEWER
+  ====================================================== */
+
+  async function loadViewer() {
+    if (viewerData || viewerLoading) {
+      return;
+    }
+
+    setViewerLoading(true);
+    setViewerError("");
+
+    try {
+      const response = await fetch(
+        "/api/kulfogw/viewer/data",
+        {
+          cache: "force-cache",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Unable to load Kulfo interactive viewer."
+        );
+      }
+
+      setViewerData(data);
+
+      setSelectedRow(data.default_row);
+      setSelectedCol(data.default_col);
+
+    } catch (err) {
+      setViewerError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load Kulfo interactive viewer."
+      );
+    } finally {
+      setViewerLoading(false);
+    }
+  }
+
+  /* =====================================================
+     LOCATION QUERY
   ====================================================== */
 
   async function queryLocation() {
@@ -158,58 +244,7 @@ export default function KulfoGWPage() {
   }
 
   /* =====================================================
-     GROUNDWATER MAP FUNCTION
-  ====================================================== */
-
-  async function loadGroundwaterMap() {
-    setMapError("");
-    setMapImage("");
-    setMapLoading(true);
-
-    try {
-      const response = await fetch(
-        "/api/kulfogw/map",
-        {
-          cache: "no-store",
-        }
-      );
-
-      if (!response.ok) {
-        const data = await response
-          .json()
-          .catch(() => null);
-
-        throw new Error(
-          data?.error ||
-            "Unable to load groundwater map."
-        );
-      }
-
-      const blob = await response.blob();
-
-      if (!blob.type.includes("image/png")) {
-        throw new Error(
-          "The KulfoGW map was not returned as a PNG image."
-        );
-      }
-
-      const imageUrl =
-        URL.createObjectURL(blob);
-
-      setMapImage(imageUrl);
-    } catch (err) {
-      setMapError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load groundwater map."
-      );
-    } finally {
-      setMapLoading(false);
-    }
-  }
-
-  /* =====================================================
-     LOAD GROUNDWATER ZONES
+     LOAD ZONES
   ====================================================== */
 
   async function loadGroundwaterZones() {
@@ -283,10 +318,18 @@ export default function KulfoGWPage() {
   }
 
   /* =====================================================
-     LOAD DATA WHEN SECTION IS OPENED
+     LOAD SECTION DATA
   ====================================================== */
 
   useEffect(() => {
+    if (
+      activeSection === "map" &&
+      !viewerData &&
+      !viewerLoading
+    ) {
+      loadViewer();
+    }
+
     if (
       activeSection === "zones" &&
       !zones &&
@@ -302,14 +345,507 @@ export default function KulfoGWPage() {
     ) {
       loadHotspots();
     }
-  }, [activeSection]);
+  }, [
+    activeSection,
+    viewerData,
+    viewerLoading,
+    zones,
+    zonesLoading,
+    hotspots,
+    hotspotsLoading,
+  ]);
+
+  /* =====================================================
+     VIEWER FIGURE
+  ====================================================== */
+
+  function createViewerFigure() {
+    if (!viewerData) {
+      return null;
+    }
+
+    const row =
+      selectedRow ??
+      viewerData.default_row;
+
+    const col =
+      selectedCol ??
+      viewerData.default_col;
+
+    const selectedLatitude =
+      viewerData.latitude[row];
+
+    const selectedLongitude =
+      viewerData.longitude[col];
+
+    const selectedValue =
+      viewerData.gw[row]?.[col] ?? null;
+
+    const ewProfile =
+      viewerData.gw[row];
+
+    const nsProfile =
+      viewerData.gw.map(
+        (values) =>
+          values[col] ?? null
+      );
+
+    /* -------------------------------------------------
+       ZONE
+    -------------------------------------------------- */
+
+    let zone = "NoData";
+
+    if (selectedValue !== null) {
+      if (selectedValue < -2) {
+        zone = "Very High Depletion";
+      } else if (selectedValue < -1) {
+        zone = "High Depletion";
+      } else if (selectedValue <= 1) {
+        zone = "Moderate / Near Reference";
+      } else if (selectedValue <= 2) {
+        zone = "High Recharge";
+      } else {
+        zone = "Very High Recharge";
+      }
+    }
+
+    /* -------------------------------------------------
+       FIGURE
+    -------------------------------------------------- */
+
+    const traces: any[] = [];
+
+    /* MAIN MAP */
+
+    traces.push({
+      type: "heatmap",
+      z: viewerData.gw,
+      x: viewerData.longitude,
+      y: viewerData.latitude,
+      colorscale: [
+        [0.00, "#313695"],
+        [0.15, "#4575B4"],
+        [0.30, "#74ADD1"],
+        [0.45, "#ABD9E9"],
+        [0.50, "#F7F7F7"],
+        [0.55, "#FEE090"],
+        [0.70, "#FDAE61"],
+        [0.85, "#F46D43"],
+        [1.00, "#A50026"],
+      ],
+      zmid: 0,
+      colorbar: {
+        title: {
+          text: "GW anomaly",
+        },
+        thickness: 18,
+      },
+      hovertemplate:
+        "Longitude: %{x:.6f}°E<br>" +
+        "Latitude: %{y:.6f}°N<br>" +
+        "GW anomaly: %{z:.4f}" +
+        "<extra></extra>",
+      connectgaps: false,
+      xaxis: "x",
+      yaxis: "y",
+    });
+
+    /* SELECTED LOCATION */
+
+    if (selectedValue !== null) {
+      traces.push({
+        type: "scatter",
+        x: [selectedLongitude],
+        y: [selectedLatitude],
+        mode: "markers",
+        marker: {
+          size: 15,
+          symbol: "circle",
+          color: "white",
+          line: {
+            width: 3,
+            color: "black",
+          },
+        },
+        hovertemplate:
+          "Longitude: " +
+          selectedLongitude.toFixed(6) +
+          "°E<br>" +
+          "Latitude: " +
+          selectedLatitude.toFixed(6) +
+          "°N<br>" +
+          "GW anomaly: " +
+          selectedValue.toFixed(4) +
+          "<extra></extra>",
+        showlegend: false,
+        xaxis: "x",
+        yaxis: "y",
+      });
+    }
+
+    /* N-S PROFILE */
+
+    traces.push({
+      type: "scatter",
+      x: nsProfile,
+      y: viewerData.latitude,
+      mode: "lines",
+      line: {
+        width: 2,
+      },
+      hovertemplate:
+        "GW anomaly: %{x:.4f}<br>" +
+        "Latitude: %{y:.6f}°N" +
+        "<extra></extra>",
+      showlegend: false,
+      connectgaps: false,
+      xaxis: "x2",
+      yaxis: "y2",
+    });
+
+    if (selectedValue !== null) {
+      traces.push({
+        type: "scatter",
+        x: [selectedValue],
+        y: [selectedLatitude],
+        mode: "markers",
+        marker: {
+          size: 10,
+          color: "black",
+        },
+        showlegend: false,
+        xaxis: "x2",
+        yaxis: "y2",
+      });
+    }
+
+    /* E-W PROFILE */
+
+    traces.push({
+      type: "scatter",
+      x: viewerData.longitude,
+      y: ewProfile,
+      mode: "lines",
+      line: {
+        width: 2,
+      },
+      hovertemplate:
+        "Longitude: %{x:.6f}°E<br>" +
+        "GW anomaly: %{y:.4f}" +
+        "<extra></extra>",
+      showlegend: false,
+      connectgaps: false,
+      xaxis: "x3",
+      yaxis: "y3",
+    });
+
+    if (selectedValue !== null) {
+      traces.push({
+        type: "scatter",
+        x: [selectedLongitude],
+        y: [selectedValue],
+        mode: "markers",
+        marker: {
+          size: 10,
+          color: "black",
+        },
+        showlegend: false,
+        xaxis: "x3",
+        yaxis: "y3",
+      });
+    }
+
+    return {
+      data: traces,
+
+      layout: {
+        height: 850,
+
+        margin: {
+          l: 55,
+          r: 35,
+          t: 70,
+          b: 45,
+        },
+
+        template: "plotly_white",
+
+        hovermode: "closest",
+
+        showlegend: false,
+
+        clickmode: "event",
+
+        grid: {
+          rows: 2,
+          columns: 2,
+          pattern: "independent",
+        },
+
+        /* MAIN MAP */
+
+        xaxis: {
+          domain: [0, 0.68],
+          title: {
+            text: "Longitude (°E)",
+          },
+          showgrid: true,
+          zeroline: false,
+        },
+
+        yaxis: {
+          domain: [0.35, 1],
+          title: {
+            text: "Latitude (°N)",
+          },
+          showgrid: true,
+          zeroline: false,
+          scaleanchor: "x",
+          scaleratio: 1,
+        },
+
+        /* N-S */
+
+        xaxis2: {
+          domain: [0.74, 1],
+          anchor: "y2",
+          title: {
+            text: "GW anomaly",
+          },
+          showgrid: true,
+        },
+
+        yaxis2: {
+          domain: [0.35, 1],
+          anchor: "x2",
+          title: {
+            text: "Latitude (°N)",
+          },
+        },
+
+        /* E-W */
+
+        xaxis3: {
+          domain: [0, 0.68],
+          anchor: "y3",
+          title: {
+            text: "Longitude (°E)",
+          },
+        },
+
+        yaxis3: {
+          domain: [0, 0.25],
+          anchor: "x3",
+          title: {
+            text: "GW anomaly",
+          },
+        },
+
+        /* CROSSHAIR */
+
+        shapes: [
+          {
+            type: "line",
+            x0: viewerData.longitude[0],
+            x1:
+              viewerData.longitude[
+                viewerData.longitude.length - 1
+              ],
+            y0: selectedLatitude,
+            y1: selectedLatitude,
+            line: {
+              color: "black",
+              width: 1.5,
+              dash: "dash",
+            },
+            xref: "x",
+            yref: "y",
+          },
+
+          {
+            type: "line",
+            x0: selectedLongitude,
+            x1: selectedLongitude,
+            y0: viewerData.latitude[0],
+            y1:
+              viewerData.latitude[
+                viewerData.latitude.length - 1
+              ],
+            line: {
+              color: "black",
+              width: 1.5,
+              dash: "dash",
+            },
+            xref: "x",
+            yref: "y",
+          },
+        ],
+
+        annotations: [
+          {
+            text: "Groundwater anomaly",
+            x: 0.34,
+            y: 1.04,
+            xref: "paper",
+            yref: "paper",
+            showarrow: false,
+            font: {
+              size: 15,
+            },
+          },
+
+          {
+            text: "North–South profile",
+            x: 0.87,
+            y: 1.04,
+            xref: "paper",
+            yref: "paper",
+            showarrow: false,
+            font: {
+              size: 15,
+            },
+          },
+
+          {
+            text: "East–West profile",
+            x: 0.34,
+            y: 0.28,
+            xref: "paper",
+            yref: "paper",
+            showarrow: false,
+            font: {
+              size: 15,
+            },
+          },
+
+          {
+            text:
+              "Selected location: " +
+              selectedLatitude.toFixed(6) +
+              "°N, " +
+              selectedLongitude.toFixed(6) +
+              "°E<br>" +
+              "Easting: " +
+              viewerData.easting[col].toFixed(2) +
+              " m | Northing: " +
+              viewerData.northing[row].toFixed(2) +
+              " m<br>" +
+              "GW anomaly: " +
+              (selectedValue === null
+                ? "NoData"
+                : selectedValue.toFixed(4)) +
+              "<br>" +
+              "Zone: " +
+              zone,
+
+            x: 0.86,
+            y: 0.12,
+            xref: "paper",
+            yref: "paper",
+            showarrow: false,
+            align: "left",
+            font: {
+              size: 12,
+            },
+          },
+        ],
+      },
+
+      config: {
+        displaylogo: false,
+        scrollZoom: true,
+        responsive: true,
+      },
+    };
+  }
+
+  /* =====================================================
+     HANDLE MAP CLICK
+  ====================================================== */
+
+  function handleViewerClick(event: any) {
+    if (!viewerData) {
+      return;
+    }
+
+    const point =
+      event?.points?.[0];
+
+    if (!point) {
+      return;
+    }
+
+    const clickedLon =
+      Number(point.x);
+
+    const clickedLat =
+      Number(point.y);
+
+    if (
+      !Number.isFinite(clickedLon) ||
+      !Number.isFinite(clickedLat)
+    ) {
+      return;
+    }
+
+    let closestCol = 0;
+    let closestRow = 0;
+
+    let minLonDistance =
+      Infinity;
+
+    let minLatDistance =
+      Infinity;
+
+    for (
+      let i = 0;
+      i < viewerData.longitude.length;
+      i++
+    ) {
+      const distance =
+        Math.abs(
+          viewerData.longitude[i] -
+            clickedLon
+        );
+
+      if (distance < minLonDistance) {
+        minLonDistance = distance;
+        closestCol = i;
+      }
+    }
+
+    for (
+      let i = 0;
+      i < viewerData.latitude.length;
+      i++
+    ) {
+      const distance =
+        Math.abs(
+          viewerData.latitude[i] -
+            clickedLat
+        );
+
+      if (distance < minLatDistance) {
+        minLatDistance = distance;
+        closestRow = i;
+      }
+    }
+
+    setSelectedRow(closestRow);
+    setSelectedCol(closestCol);
+  }
+
+  /* =====================================================
+     RENDER
+  ====================================================== */
 
   return (
     <main className="kulfogw-page">
 
-      {/* =====================================================
+      {/* =================================================
           SIDEBAR
-      ====================================================== */}
+      ================================================== */}
 
       <aside className="kulfogw-sidebar">
 
@@ -321,7 +857,9 @@ export default function KulfoGWPage() {
 
           <div>
             <h1>KulfoGW</h1>
-            <span>Groundwater Analysis</span>
+            <span>
+              Groundwater Analysis
+            </span>
           </div>
 
         </div>
@@ -373,7 +911,7 @@ export default function KulfoGWPage() {
               }
             >
               <span>▧</span>
-              Groundwater Map
+              Interactive Map
             </button>
 
             <button
@@ -453,15 +991,11 @@ export default function KulfoGWPage() {
 
       </aside>
 
-      {/* =====================================================
-          RIGHT CONTENT
-      ====================================================== */}
+      {/* =================================================
+          CONTENT
+      ================================================== */}
 
       <section className="kulfogw-content">
-
-        {/* =====================================================
-            HEADER
-        ====================================================== */}
 
         <header className="kulfogw-header">
 
@@ -476,8 +1010,8 @@ export default function KulfoGWPage() {
             </h2>
 
             <p>
-              High-resolution groundwater analysis
-              for the Kulfo Watershed.
+              High-resolution groundwater
+              analysis for the Kulfo Watershed.
             </p>
 
           </div>
@@ -492,9 +1026,9 @@ export default function KulfoGWPage() {
 
         </header>
 
-        {/* =====================================================
+        {/* =================================================
             OVERVIEW
-        ====================================================== */}
+        ================================================== */}
 
         {activeSection === "overview" && (
 
@@ -515,8 +1049,10 @@ export default function KulfoGWPage() {
                 <p>
                   Explore spatial groundwater
                   conditions, query individual
-                  locations, view groundwater zones,
-                  and identify spatial hotspots and
+                  locations, interactively examine
+                  the 30 m U-Net groundwater anomaly
+                  map, view groundwater zones, and
+                  identify spatial hotspots and
                   patterns.
                 </p>
 
@@ -570,12 +1106,13 @@ export default function KulfoGWPage() {
                 <div>
 
                   <h3>
-                    Groundwater Map
+                    Interactive Map
                   </h3>
 
                   <p>
-                    View the 30 m groundwater
-                    anomaly distribution.
+                    Explore the 30 m groundwater
+                    anomaly map and click any
+                    location to examine profiles.
                   </p>
 
                 </div>
@@ -704,9 +1241,9 @@ export default function KulfoGWPage() {
 
         )}
 
-        {/* =====================================================
-            LOCATION QUERY
-        ====================================================== */}
+        {/* =================================================
+            LOCATION
+        ================================================== */}
 
         {activeSection === "location" && (
 
@@ -736,8 +1273,6 @@ export default function KulfoGWPage() {
 
             <div className="coordinate-form">
 
-              {/* LATITUDE */}
-
               <div className="coordinate-field">
 
                 <label htmlFor="latitude">
@@ -760,8 +1295,6 @@ export default function KulfoGWPage() {
                 </span>
 
               </div>
-
-              {/* LONGITUDE */}
 
               <div className="coordinate-field">
 
@@ -786,16 +1319,13 @@ export default function KulfoGWPage() {
 
               </div>
 
-              {/* QUERY LOCATION */}
-
               <div className="coordinate-field query-field">
 
-                <label htmlFor="query-location">
+                <label>
                   Query Location
                 </label>
 
                 <button
-                  id="query-location"
                   className="query-button"
                   onClick={queryLocation}
                   disabled={loading}
@@ -806,8 +1336,8 @@ export default function KulfoGWPage() {
                 </button>
 
                 <span>
-                  Retrieve the groundwater condition
-                  at this location.
+                  Retrieve the groundwater
+                  condition at this location.
                 </span>
 
               </div>
@@ -847,8 +1377,6 @@ export default function KulfoGWPage() {
                     </h3>
 
                   </div>
-
-                  {/* SELECTED LOCATION */}
 
                   <div className="result-coordinate">
 
@@ -905,9 +1433,9 @@ export default function KulfoGWPage() {
 
         )}
 
-        {/* =====================================================
-            GROUNDWATER MAP
-        ====================================================== */}
+        {/* =================================================
+            INTERACTIVE MAP
+        ================================================== */}
 
         {activeSection === "map" && (
 
@@ -918,119 +1446,115 @@ export default function KulfoGWPage() {
               <div>
 
                 <span className="section-label">
-                  SPATIAL MAP
+                  INTERACTIVE SPATIAL VIEWER
                 </span>
 
                 <h3>
-                  Groundwater Map
+                  Kulfo U-Net Groundwater Viewer
                 </h3>
 
                 <p>
-                  Explore the 30 m groundwater
-                  anomaly distribution for the Kulfo
-                  Watershed.
+                  Click any valid raster location to
+                  examine the groundwater anomaly,
+                  North–South profile, East–West
+                  profile, and selected-location
+                  information.
                 </p>
 
               </div>
 
-              <button
-                className="map-button"
-                onClick={loadGroundwaterMap}
-                disabled={mapLoading}
+            </div>
+
+            {viewerLoading && (
+
+              <div className="map-placeholder">
+
+                <div className="map-placeholder-icon">
+                  ◌
+                </div>
+
+                <h4>
+                  Loading interactive viewer...
+                </h4>
+
+                <p>
+                  Loading the 30 m Kulfo U-Net
+                  groundwater raster.
+                </p>
+
+              </div>
+
+            )}
+
+            {viewerError && (
+
+              <div className="query-error">
+
+                <strong>
+                  Viewer error
+                </strong>
+
+                <p>
+                  {viewerError}
+                </p>
+
+                <button
+                  className="query-button"
+                  onClick={loadViewer}
+                >
+                  Try Again
+                </button>
+
+              </div>
+
+            )}
+
+            {viewerData && !viewerLoading && (
+
+              <div
+                className="map-image-container"
+                style={{
+                  width: "100%",
+                  overflowX: "auto",
+                }}
               >
-                {mapLoading
-                  ? "Loading..."
-                  : "Load Groundwater Map"}
-              </button>
 
-            </div>
+                {(() => {
 
-            <div className="map-display">
+                  const figure =
+                    createViewerFigure();
 
-              {!mapImage &&
-                !mapError &&
-                !mapLoading && (
+                  if (!figure) {
+                    return null;
+                  }
 
-                  <div className="map-placeholder">
+                  return (
+                    <Plot
+                      data={figure.data}
+                      layout={figure.layout}
+                      config={figure.config}
+                      onClick={handleViewerClick}
+                      style={{
+                        width: "100%",
+                        minWidth: "950px",
+                      }}
+                      useResizeHandler={true}
+                    />
+                  );
 
-                    <div className="map-placeholder-icon">
-                      ▧
-                    </div>
+                })()}
 
-                    <h4>
-                      Groundwater Spatial Map
-                    </h4>
+              </div>
 
-                    <p>
-                      Load the 30 m groundwater
-                      anomaly map for the Kulfo
-                      Watershed.
-                    </p>
-
-                  </div>
-
-                )}
-
-              {mapLoading && (
-
-                <div className="map-placeholder">
-
-                  <div className="map-placeholder-icon">
-                    ◌
-                  </div>
-
-                  <h4>
-                    Loading groundwater map...
-                  </h4>
-
-                  <p>
-                    Loading the Kulfo 30 m spatial
-                    groundwater map.
-                  </p>
-
-                </div>
-
-              )}
-
-              {mapError && (
-
-                <div className="query-error">
-
-                  <strong>
-                    Map error
-                  </strong>
-
-                  <p>
-                    {mapError}
-                  </p>
-
-                </div>
-
-              )}
-
-              {mapImage && (
-
-                <div className="map-image-container">
-
-                  <img
-                    src={mapImage}
-                    alt="Kulfo 30 m groundwater anomaly map"
-                    className="groundwater-map-image"
-                  />
-
-                </div>
-
-              )}
-
-            </div>
+            )}
 
           </section>
 
         )}
 
-        {/* =====================================================
-            GROUNDWATER ZONES
-        ====================================================== */}
+        {/* =================================================
+            ZONES
+        ================================================== */}
 
         {activeSection === "zones" && (
 
@@ -1211,9 +1735,9 @@ export default function KulfoGWPage() {
 
         )}
 
-        {/* =====================================================
-            HOTSPOTS & PATTERNS
-        ====================================================== */}
+        {/* =================================================
+            HOTSPOTS
+        ================================================== */}
 
         {activeSection === "hotspots" && (
 
