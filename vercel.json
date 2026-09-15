@@ -19,6 +19,12 @@
       }
     },
     {
+      "source": "/api/kulfogw/viewer/data",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
       "source": "/(.*)",
       "destination": {
         "service": "frontend"
