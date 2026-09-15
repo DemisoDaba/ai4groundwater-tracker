@@ -57,7 +57,7 @@ type HotspotZone = {
   percentage: number;
 };
 
-type HotspotResults = {
+type HotspotsResult = {
   "Very High Depletion": HotspotZone;
   "High Depletion": HotspotZone;
   "Moderate / Near Reference": HotspotZone;
@@ -70,8 +70,8 @@ type HotspotResults = {
   "Dominant spatial zone": string;
 };
 
-type HotspotsResult = {
-  results: HotspotResults;
+type HotspotsResponse = {
+  results: HotspotsResult;
   interpretation: string;
 };
 
@@ -129,7 +129,7 @@ export default function KulfoGWPage() {
   ====================================================== */
 
   const [hotspots, setHotspots] =
-    useState<HotspotsResult | null>(null);
+    useState<HotspotsResponse | null>(null);
 
   const [hotspotsLoading, setHotspotsLoading] =
     useState(false);
@@ -381,6 +381,10 @@ export default function KulfoGWPage() {
     const selectedValue =
       viewerData.gw[row]?.[col] ?? null;
 
+    /* -------------------------------------------------
+       PROFILES
+    -------------------------------------------------- */
+
     const ewProfile =
       viewerData.gw[row];
 
@@ -396,7 +400,10 @@ export default function KulfoGWPage() {
 
     let zone = "NoData";
 
-    if (selectedValue !== null) {
+    if (
+      selectedValue !== null &&
+      Number.isFinite(selectedValue)
+    ) {
       if (selectedValue < -2) {
         zone = "Very High Depletion";
       } else if (selectedValue < -1) {
@@ -410,19 +417,25 @@ export default function KulfoGWPage() {
       }
     }
 
-    /* -------------------------------------------------
-       FIGURE
-    -------------------------------------------------- */
+    /* =================================================
+       TRACES
+    ================================================== */
 
     const traces: any[] = [];
 
-    /* MAIN MAP */
+    /* =================================================
+       MAIN GROUNDWATER ANOMALY HEATMAP
+    ================================================== */
 
     traces.push({
       type: "heatmap",
+
       z: viewerData.gw,
+
       x: viewerData.longitude,
+
       y: viewerData.latitude,
+
       colorscale: [
         [0.00, "#313695"],
         [0.15, "#4575B4"],
@@ -434,40 +447,61 @@ export default function KulfoGWPage() {
         [0.85, "#F46D43"],
         [1.00, "#A50026"],
       ],
+
       zmid: 0,
+
       colorbar: {
         title: {
           text: "GW anomaly",
         },
+
         thickness: 18,
       },
+
       hovertemplate:
         "Longitude: %{x:.6f}°E<br>" +
         "Latitude: %{y:.6f}°N<br>" +
         "GW anomaly: %{z:.4f}" +
         "<extra></extra>",
+
       connectgaps: false,
+
       xaxis: "x",
+
       yaxis: "y",
     });
 
-    /* SELECTED LOCATION */
+    /* =================================================
+       SELECTED LOCATION ON MAP
+    ================================================== */
 
-    if (selectedValue !== null) {
+    if (
+      selectedValue !== null &&
+      Number.isFinite(selectedValue)
+    ) {
       traces.push({
         type: "scatter",
+
         x: [selectedLongitude],
+
         y: [selectedLatitude],
+
         mode: "markers",
+
         marker: {
           size: 15,
+
           symbol: "circle",
+
           color: "white",
+
           line: {
             width: 3,
+
             color: "black",
           },
         },
+
         hovertemplate:
           "Longitude: " +
           selectedLongitude.toFixed(6) +
@@ -478,83 +512,219 @@ export default function KulfoGWPage() {
           "GW anomaly: " +
           selectedValue.toFixed(4) +
           "<extra></extra>",
+
         showlegend: false,
+
         xaxis: "x",
+
         yaxis: "y",
       });
     }
 
-    /* N-S PROFILE */
+    /* =================================================
+       NORTH–SOUTH PROFILE
+    ================================================== */
 
     traces.push({
       type: "scatter",
+
       x: nsProfile,
+
       y: viewerData.latitude,
+
       mode: "lines",
+
       line: {
         width: 2,
       },
+
       hovertemplate:
         "GW anomaly: %{x:.4f}<br>" +
         "Latitude: %{y:.6f}°N" +
         "<extra></extra>",
+
       showlegend: false,
+
       connectgaps: false,
+
       xaxis: "x2",
+
       yaxis: "y2",
     });
 
-    if (selectedValue !== null) {
+    /* SELECTED N-S POINT */
+
+    if (
+      selectedValue !== null &&
+      Number.isFinite(selectedValue)
+    ) {
       traces.push({
         type: "scatter",
+
         x: [selectedValue],
+
         y: [selectedLatitude],
+
         mode: "markers",
+
         marker: {
           size: 10,
+
           color: "black",
         },
+
         showlegend: false,
+
         xaxis: "x2",
+
         yaxis: "y2",
       });
     }
 
-    /* E-W PROFILE */
+    /* =================================================
+       EAST–WEST PROFILE
+    ================================================== */
 
     traces.push({
       type: "scatter",
+
       x: viewerData.longitude,
+
       y: ewProfile,
+
       mode: "lines",
+
       line: {
         width: 2,
       },
+
       hovertemplate:
         "Longitude: %{x:.6f}°E<br>" +
         "GW anomaly: %{y:.4f}" +
         "<extra></extra>",
+
       showlegend: false,
+
       connectgaps: false,
+
       xaxis: "x3",
+
       yaxis: "y3",
     });
 
-    if (selectedValue !== null) {
+    /* SELECTED E-W POINT */
+
+    if (
+      selectedValue !== null &&
+      Number.isFinite(selectedValue)
+    ) {
       traces.push({
         type: "scatter",
+
         x: [selectedLongitude],
+
         y: [selectedValue],
+
         mode: "markers",
+
         marker: {
           size: 10,
+
           color: "black",
         },
+
         showlegend: false,
+
         xaxis: "x3",
+
         yaxis: "y3",
       });
     }
+
+    /* =================================================
+       SELECTED LOCATION TABLE
+    ================================================== */
+
+    traces.push({
+      type: "table",
+
+      domain: {
+        x: [0.718, 1.0],
+        y: [0.0, 0.288],
+      },
+
+      header: {
+        values: [
+          "<b>Parameter</b>",
+          "<b>Value</b>",
+        ],
+
+        align: "left",
+
+        font: {
+          size: 12,
+        },
+
+        height: 28,
+      },
+
+      cells: {
+        values: [
+          [
+            "Longitude",
+            "Latitude",
+            "Easting",
+            "Northing",
+            "GW anomaly",
+            "Zone",
+            "Pixel row",
+            "Pixel column",
+            "CRS",
+          ],
+
+          [
+            selectedLongitude.toFixed(6) +
+              "°E",
+
+            selectedLatitude.toFixed(6) +
+              "°N",
+
+            viewerData.easting[col].toFixed(2) +
+              " m",
+
+            viewerData.northing[row].toFixed(2) +
+              " m",
+
+            selectedValue === null ||
+            !Number.isFinite(selectedValue)
+              ? "NoData"
+              : selectedValue.toFixed(4),
+
+            zone,
+
+            String(row),
+
+            String(col),
+
+            viewerData.crs,
+          ],
+        ],
+
+        align: "left",
+
+        font: {
+          size: 11,
+        },
+
+        height: 25,
+      },
+
+      columnwidth: [0.42, 0.58],
+    });
+
+    /* =================================================
+       LAYOUT
+    ================================================== */
 
     return {
       data: traces,
@@ -563,10 +733,10 @@ export default function KulfoGWPage() {
         height: 850,
 
         margin: {
-          l: 55,
-          r: 35,
-          t: 70,
-          b: 45,
+          l: 45,
+          r: 45,
+          t: 65,
+          b: 40,
         },
 
         template: "plotly_white",
@@ -577,119 +747,193 @@ export default function KulfoGWPage() {
 
         clickmode: "event",
 
+        /* -------------------------------------------------
+           DASH SUBPLOT PARAMETERS
+
+           column_widths = [0.70, 0.30]
+           row_heights   = [0.68, 0.32]
+           horizontal_spacing = 0.06
+           vertical_spacing   = 0.10
+        -------------------------------------------------- */
+
         grid: {
           rows: 2,
+
           columns: 2,
+
           pattern: "independent",
+
+          xgap: 0.06,
+
+          ygap: 0.10,
         },
 
-        /* MAIN MAP */
+        /* =================================================
+           MAIN MAP
+        ================================================== */
 
         xaxis: {
-          domain: [0, 0.68],
+          domain: [0.0, 0.658],
+
           title: {
             text: "Longitude (°E)",
           },
+
           showgrid: true,
+
           zeroline: false,
         },
 
         yaxis: {
-          domain: [0.35, 1],
+          domain: [0.388, 1.0],
+
           title: {
             text: "Latitude (°N)",
           },
+
           showgrid: true,
+
           zeroline: false,
+
           scaleanchor: "x",
+
           scaleratio: 1,
         },
 
-        /* N-S */
+        /* =================================================
+           NORTH–SOUTH PROFILE
+        ================================================== */
 
         xaxis2: {
-          domain: [0.74, 1],
+          domain: [0.718, 1.0],
+
           anchor: "y2",
+
           title: {
             text: "GW anomaly",
           },
+
           showgrid: true,
         },
 
         yaxis2: {
-          domain: [0.35, 1],
+          domain: [0.388, 1.0],
+
           anchor: "x2",
+
           title: {
             text: "Latitude (°N)",
           },
+
+          showgrid: true,
         },
 
-        /* E-W */
+        /* =================================================
+           EAST–WEST PROFILE
+        ================================================== */
 
         xaxis3: {
-          domain: [0, 0.68],
+          domain: [0.0, 0.658],
+
           anchor: "y3",
+
           title: {
             text: "Longitude (°E)",
           },
+
+          showgrid: true,
         },
 
         yaxis3: {
-          domain: [0, 0.25],
+          domain: [0.0, 0.288],
+
           anchor: "x3",
+
           title: {
             text: "GW anomaly",
           },
+
+          showgrid: true,
         },
 
-        /* CROSSHAIR */
+        /* =================================================
+           CROSSHAIRS
+        ================================================== */
 
         shapes: [
           {
             type: "line",
+
             x0: viewerData.longitude[0],
+
             x1:
               viewerData.longitude[
                 viewerData.longitude.length - 1
               ],
+
             y0: selectedLatitude,
+
             y1: selectedLatitude,
+
             line: {
               color: "black",
+
               width: 1.5,
+
               dash: "dash",
             },
+
             xref: "x",
+
             yref: "y",
           },
 
           {
             type: "line",
+
             x0: selectedLongitude,
+
             x1: selectedLongitude,
+
             y0: viewerData.latitude[0],
+
             y1:
               viewerData.latitude[
                 viewerData.latitude.length - 1
               ],
+
             line: {
               color: "black",
+
               width: 1.5,
+
               dash: "dash",
             },
+
             xref: "x",
+
             yref: "y",
           },
         ],
 
+        /* =================================================
+           PANEL TITLES
+        ================================================== */
+
         annotations: [
           {
             text: "Groundwater anomaly",
-            x: 0.34,
-            y: 1.04,
+
+            x: 0.329,
+
+            y: 1.035,
+
             xref: "paper",
+
             yref: "paper",
+
             showarrow: false,
+
             font: {
               size: 15,
             },
@@ -697,11 +941,17 @@ export default function KulfoGWPage() {
 
           {
             text: "North–South profile",
-            x: 0.87,
-            y: 1.04,
+
+            x: 0.859,
+
+            y: 1.035,
+
             xref: "paper",
+
             yref: "paper",
+
             showarrow: false,
+
             font: {
               size: 15,
             },
@@ -709,52 +959,51 @@ export default function KulfoGWPage() {
 
           {
             text: "East–West profile",
-            x: 0.34,
-            y: 0.28,
+
+            x: 0.329,
+
+            y: 0.325,
+
             xref: "paper",
+
             yref: "paper",
+
             showarrow: false,
+
             font: {
               size: 15,
             },
           },
 
           {
-            text:
-              "Selected location: " +
-              selectedLatitude.toFixed(6) +
-              "°N, " +
-              selectedLongitude.toFixed(6) +
-              "°E<br>" +
-              "Easting: " +
-              viewerData.easting[col].toFixed(2) +
-              " m | Northing: " +
-              viewerData.northing[row].toFixed(2) +
-              " m<br>" +
-              "GW anomaly: " +
-              (selectedValue === null
-                ? "NoData"
-                : selectedValue.toFixed(4)) +
-              "<br>" +
-              "Zone: " +
-              zone,
+            text: "Selected location",
 
-            x: 0.86,
-            y: 0.12,
+            x: 0.859,
+
+            y: 0.325,
+
             xref: "paper",
+
             yref: "paper",
+
             showarrow: false,
-            align: "left",
+
             font: {
-              size: 12,
+              size: 15,
             },
           },
         ],
       },
 
+      /* =================================================
+         PLOTLY CONFIG
+      ================================================== */
+
       config: {
         displaylogo: false,
+
         scrollZoom: true,
+
         responsive: true,
       },
     };
@@ -857,6 +1106,7 @@ export default function KulfoGWPage() {
 
           <div>
             <h1>KulfoGW</h1>
+
             <span>
               Groundwater Analysis
             </span>
