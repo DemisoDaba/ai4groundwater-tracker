@@ -49,56 +49,53 @@ def location_query(request: LocationRequest):
 
 @app.get("/api/kulfogw/viewer/data")
 def viewer_data():
-    data_file = (
-        Path(__file__).resolve().parent.parent
-        / "kulfo"
-        / "data"
-        / "Kulfo_GW_Anomaly_UNet_30m_PROTOTYPE.tif"
-    )
-
-    # The raster is installed with the kulfo package.
     import kulfo.map as kulfo_map
 
     data_file = Path(kulfo_map.DATA_FILE)
 
     with rasterio.open(data_file) as src:
         data = src.read(1).astype(float)
+
+        if src.nodata is not None:
+            data[data == src.nodata] = np.nan
+
         bounds = src.bounds
-        nodata = src.nodata
         crs = src.crs
-        transform_affine = src.transform
         height, width = data.shape
 
-        if nodata is not None:
-            data[data == nodata] = np.nan
+        # Pixel-center coordinates in the raster CRS.
+        cols = np.arange(width)
+        rows = np.arange(height)
 
-        xs = [
-            bounds.left,
-            bounds.right,
-            bounds.right,
-            bounds.left,
-        ]
-
-        ys = [
-            bounds.bottom,
-            bounds.bottom,
-            bounds.top,
-            bounds.top,
-        ]
-
-        lons, lats = transform(
-            crs,
-            "EPSG:4326",
-            xs,
-            ys,
+        easting = (
+            bounds.left
+            + (cols + 0.5) * src.transform.a
         )
 
-        geographic_bounds = [
-            min(lons),
-            max(lons),
-            min(lats),
-            max(lats),
-        ]
+        northing = (
+            bounds.top
+            - (rows + 0.5) * abs(src.transform.e)
+        )
+
+        # Convert pixel-center coordinates to geographic coordinates.
+        longitude, latitude = transform(
+            crs,
+            "EPSG:4326",
+            easting.tolist(),
+            [northing[0]] * width,
+        )
+
+        # Latitude varies by row; longitude varies by column.
+        longitude = np.asarray(longitude)
+
+        _, latitude_by_row = transform(
+            crs,
+            "EPSG:4326",
+            [easting[0]] * height,
+            northing.tolist(),
+        )
+
+        latitude_by_row = np.asarray(latitude_by_row)
 
         default_row = height // 2
         default_col = width // 2
@@ -111,26 +108,14 @@ def viewer_data():
                 ]
                 for row in data
             ],
-            "longitude": [
-                geographic_bounds[0],
-                geographic_bounds[1],
-            ],
-            "latitude": [
-                geographic_bounds[2],
-                geographic_bounds[3],
-            ],
-            "easting": [
-                bounds.left,
-                bounds.right,
-            ],
-            "northing": [
-                bounds.bottom,
-                bounds.top,
-            ],
+            "longitude": longitude.tolist(),
+            "latitude": latitude_by_row.tolist(),
+            "easting": easting.tolist(),
+            "northing": northing.tolist(),
             "height": height,
             "width": width,
-            "resolution_x": transform_affine.a,
-            "resolution_y": abs(transform_affine.e),
+            "resolution_x": src.transform.a,
+            "resolution_y": abs(src.transform.e),
             "crs": str(crs),
             "bounds": {
                 "left": bounds.left,
