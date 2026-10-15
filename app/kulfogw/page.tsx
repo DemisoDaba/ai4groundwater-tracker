@@ -1201,20 +1201,19 @@ export default function KulfoGWPage() {
             </div>
 
             <button
-              className="nav-item disabled"
-              disabled
+              className="nav-item"
+              onClick={() => router.push("/gwtimeseries")}
             >
-              <span>◷</span>
-              Overview
-              <small>Later</small>
+              <span>⌁</span>
+              Time Series
             </button>
 
             <button
               className="nav-item disabled"
               disabled
             >
-              <span>⌁</span>
-              Time Series
+              <span>◷</span>
+              Overview
               <small>Later</small>
             </button>
 
