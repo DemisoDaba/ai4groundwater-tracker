@@ -1,5 +1,6 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import "./gwtimeseries.css";
@@ -30,7 +31,7 @@ const Popup = dynamic(
 const DATA_REPO =
   "https://raw.githubusercontent.com/DemisoDaba/kulfo-gw-monitor/main/data";
 
-const KULFO_GEOJSON =
+const KULFO_GEOJSON_URL =
   "https://raw.githubusercontent.com/DemisoDaba/kulfo-gw-monitor/main/data/kulfo_watershed.geojson";
 
 const KULFO_CENTER: [number, number] = [6.15, 37.45];
@@ -42,6 +43,25 @@ type Row = {
 
 export default function GWTimeSeriesPage() {
   const [activeTab, setActiveTab] = useState<"basin" | "point">("basin");
+
+  /* =========================================================
+     KULFO GEOJSON (fetched as object)
+  ========================================================= */
+  const [kulfoGeoJson, setKulfoGeoJson] = useState<any>(null);
+  const [geoError, setGeoError] = useState("");
+
+  useEffect(() => {
+    fetch(KULFO_GEOJSON_URL)
+      .then((r) => {
+        if (!r.ok) throw new Error("Kulfo GeoJSON not found");
+        return r.json();
+      })
+      .then((data) => setKulfoGeoJson(data))
+      .catch((err) => {
+        console.error("GeoJSON load failed:", err);
+        setGeoError(err instanceof Error ? err.message : "GeoJSON failed");
+      });
+  }, []);
 
   /* =========================================================
      BASIN DATA
@@ -142,7 +162,11 @@ export default function GWTimeSeriesPage() {
             y: [last.gwsa],
             type: "scatter",
             mode: "markers+text",
-            marker: { size: 12, color: "#D55E00", line: { color: "white", width: 2 } },
+            marker: {
+              size: 12,
+              color: "#D55E00",
+              line: { color: "white", width: 2 },
+            },
             text: [`${last.gwsa.toFixed(1)} mm`],
             textposition: "top center",
             textfont: { size: 12, color: "#D55E00" },
@@ -153,7 +177,13 @@ export default function GWTimeSeriesPage() {
         layout={{
           title: { text: title, font: { size: 16, color: "#0f172a" } },
           xaxis: { title: "Date", showgrid: true, gridcolor: "#e2e8f0" },
-          yaxis: { title: "GWSA (mm)", showgrid: true, gridcolor: "#e2e8f0", zeroline: true, zerolinecolor: "#94a3b8" },
+          yaxis: {
+            title: "GWSA (mm)",
+            showgrid: true,
+            gridcolor: "#e2e8f0",
+            zeroline: true,
+            zerolinecolor: "#94a3b8",
+          },
           height: 480,
           margin: { l: 60, r: 30, t: 60, b: 60 },
           template: "plotly_white",
@@ -174,11 +204,13 @@ export default function GWTimeSeriesPage() {
       {/* ============= HEADER ============= */}
       <header className="gwt-header">
         <div className="gwt-header-left">
-          <div className="gwt-breadcrumb">AI4Groundwater / KulfoGW / Time Series</div>
+          <div className="gwt-breadcrumb">
+            AI4Groundwater / KulfoGW / Time Series
+          </div>
           <h1>Groundwater Time Series</h1>
           <p>
-            Monthly groundwater storage anomaly (GWSA) for the Kulfo watershed
-            and any point inside it.
+            Monthly groundwater storage anomaly (GWSA) for the Kulfo
+            watershed and any point inside it.
           </p>
         </div>
         <div className="gwt-header-badge">
@@ -211,7 +243,10 @@ export default function GWTimeSeriesPage() {
           <div className="gwt-panel-header">
             <div>
               <h2>Kulfo Basin — Monthly GWSA</h2>
-              <p>One value per month for the entire watershed, updated automatically.</p>
+              <p>
+                One value per month for the entire watershed, updated
+                automatically.
+              </p>
             </div>
             <a
               href={`${DATA_REPO}/kulfo_gwsa_forecasts.csv`}
@@ -226,7 +261,9 @@ export default function GWTimeSeriesPage() {
           {basinError && <div className="gwt-error">{basinError}</div>}
 
           {basinData.length > 0 && !basinLoading && (
-            <div className="gwt-chart">{renderChart(basinData, "Kulfo Basin — GWSA (mm)")}</div>
+            <div className="gwt-chart">
+              {renderChart(basinData, "Kulfo Basin — GWSA (mm)")}
+            </div>
           )}
         </section>
       )}
@@ -237,7 +274,10 @@ export default function GWTimeSeriesPage() {
           <div className="gwt-panel-header">
             <div>
               <h2>Point-Specific GWSA</h2>
-              <p>Click on the map or enter coordinates inside the Kulfo watershed.</p>
+              <p>
+                Click on the map or enter coordinates inside the Kulfo
+                watershed.
+              </p>
             </div>
           </div>
 
@@ -254,23 +294,34 @@ export default function GWTimeSeriesPage() {
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   attribution="&copy; OpenStreetMap"
                 />
-                <GeoJSON
-                  data={KULFO_GEOJSON}
-                  style={{
-                    color: "#0072B2",
-                    weight: 2.5,
-                    fillColor: "#ABD9E9",
-                    fillOpacity: 0.25,
-                  }}
-                />
+
+                {kulfoGeoJson && (
+                  <GeoJSON
+                    data={kulfoGeoJson}
+                    style={{
+                      color: "#0072B2",
+                      weight: 2.5,
+                      fillColor: "#ABD9E9",
+                      fillOpacity: 0.25,
+                    }}
+                  />
+                )}
+
                 {latitude && longitude && Number.isFinite(Number(latitude)) && (
                   <Marker position={[Number(latitude), Number(longitude)]}>
                     <Popup>
-                      {Number(latitude).toFixed(4)}°N, {Number(longitude).toFixed(4)}°E
+                      {Number(latitude).toFixed(4)}°N,{" "}
+                      {Number(longitude).toFixed(4)}°E
                     </Popup>
                   </Marker>
                 )}
               </MapContainer>
+
+              {geoError && (
+                <div className="gwt-error" style={{ marginTop: 12 }}>
+                  Map overlay: {geoError}
+                </div>
+              )}
             </div>
 
             {/* ===== FORM ===== */}
