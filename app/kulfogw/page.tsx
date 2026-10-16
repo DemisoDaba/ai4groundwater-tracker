@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import "./kulfogw.css";
 
@@ -76,6 +77,7 @@ type HotspotsResponse = {
 };
 
 export default function KulfoGWPage() {
+  const router = useRouter();  
   const [activeSection, setActiveSection] =
     useState("overview");
 
