@@ -8,6 +8,7 @@ dependencies = [
     "numpy",
     "rasterio==1.5.1",
     "matplotlib",
+    "plotly",
     "kulfo @ git+https://github.com/DemisoDaba/kulfogw.git"
 ]
 
