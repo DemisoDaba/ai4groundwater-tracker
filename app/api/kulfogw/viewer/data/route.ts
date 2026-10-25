@@ -1,20 +1,30 @@
+
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import { writeFile, unlink } from "fs/promises";
 import path from "path";
 import os from "os";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 export async function GET() {
-  const python =
-    process.env.KULFO_PYTHON_PATH || "python";
+  const python = process.env.KULFO_PYTHON_PATH || "python";
 
   const packagePath =
     process.env.KULFO_PACKAGE_PATH ||
     path.join(process.cwd(), "kulfo");
 
+  const scriptPath = path.join(
+    os.tmpdir(),
+    `kulfogw_viewer_data_${process.pid}.py`
+  );
+
   const script = `
 import sys
 import json
+import traceback
 import numpy as np
 import rasterio
 from rasterio.transform import xy
@@ -25,17 +35,13 @@ sys.path.insert(0, ${JSON.stringify(packagePath)})
 from kulfo.spatial import DATA_FILE
 
 with rasterio.open(DATA_FILE) as src:
-
     gw = src.read(1).astype(np.float32)
-
     transform = src.transform
     crs = src.crs
     bounds = src.bounds
     nodata = src.nodata
-
     height = src.height
     width = src.width
-
     resolution_x = src.res[0]
     resolution_y = src.res[1]
 
@@ -50,12 +56,12 @@ rows = np.arange(height)
 easting = np.array([
     xy(transform, 0, c, offset="center")[0]
     for c in cols
-])
+], dtype=np.float64)
 
 northing = np.array([
     xy(transform, r, 0, offset="center")[1]
     for r in rows
-])
+], dtype=np.float64)
 
 if northing[0] > northing[-1]:
     northing = northing[::-1]
@@ -77,8 +83,8 @@ _, latitude = transformer.transform(
     northing
 )
 
-longitude = np.asarray(longitude)
-latitude = np.asarray(latitude)
+longitude = np.asarray(longitude, dtype=np.float64)
+latitude = np.asarray(latitude, dtype=np.float64)
 
 valid_pixels = np.argwhere(np.isfinite(gw))
 
@@ -89,8 +95,11 @@ if len(valid_pixels) == 0:
 
 r0, c0 = valid_pixels[len(valid_pixels) // 2]
 
+# Convert NaN and infinite values to JSON null.
+gw_json = np.where(np.isfinite(gw), gw, None).tolist()
+
 data = {
-    "gw": np.where(np.isfinite(gw), gw, None).tolist(),
+    "gw": gw_json,
     "longitude": longitude.tolist(),
     "latitude": latitude.tolist(),
     "easting": easting.tolist(),
@@ -110,90 +119,102 @@ data = {
     "default_col": int(c0)
 }
 
-print(json.dumps(data))
+print(json.dumps(data, allow_nan=False))
 `;
 
-  const scriptPath = path.join(
-    os.tmpdir(),
-    "kulfogw_viewer_data.py"
-  );
-
   try {
-    await writeFile(
-      scriptPath,
-      script,
-      "utf8"
-    );
+    await writeFile(scriptPath, script, "utf8");
 
     const result = await new Promise<string>(
       (resolve, reject) => {
-        const child = spawn(
-          python,
-          [scriptPath],
-          {
-            windowsHide: true,
-          }
-        );
+        const child = spawn(python, [scriptPath], {
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
 
         let stdout = "";
         let stderr = "";
+        let settled = false;
 
-        child.stdout.on("data", (data) => {
-          stdout += data.toString();
-        });
+        const finishError = (error: Error) => {
+          if (settled) return;
+          settled = true;
+          reject(error);
+        };
 
-        child.stderr.on("data", (data) => {
-          stderr += data.toString();
-        });
+        child.stdout.on("data", (chunk: Buffer) => {
+          stdout += chunk.toString();
 
-        child.on("error", reject);
-
-        child.on("close", (code) => {
-          if (code !== 0) {
-            reject(
-              new Error(
-                stderr ||
-                  stdout ||
-                  "Unable to load Kulfo viewer data."
-              )
+          if (stdout.length > 50 * 1024 * 1024) {
+            child.kill();
+            finishError(
+              new Error("Viewer output exceeded the 50 MB limit.")
             );
-          } else {
-            resolve(stdout.trim());
           }
         });
+
+        child.stderr.on("data", (chunk: Buffer) => {
+          stderr += chunk.toString();
+
+          // Avoid retaining unlimited diagnostic output.
+          if (stderr.length > 1024 * 1024) {
+            stderr = stderr.slice(-1024 * 1024);
+          }
+        });
+
+        child.on("error", (error) => {
+          finishError(
+            new Error(
+              `Unable to start Python executable "${python}". ` +
+              `Check KULFO_PYTHON_PATH and the deployment runtime. ` +
+              error.message
+            )
+          );
+        });
+
+        child.on("close", (code) => {
+          if (settled) return;
+
+          if (code !== 0) {
+            finishError(
+              new Error(
+                stderr.trim() ||
+                stdout.trim() ||
+                `Python exited with code ${code}.`
+              )
+            );
+            return;
+          }
+
+          settled = true;
+          resolve(stdout.trim());
+        });
       }
     );
 
-    return new NextResponse(
-      result,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control":
-            "public, max-age=3600",
-        },
-      }
-    );
+    // Verify that the child produced valid JSON before returning it.
+    const data = JSON.parse(result);
 
+    return NextResponse.json(data, {
+      status: 200,
+      headers: {
+        "Cache-Control": "public, max-age=3600",
+      },
+    });
   } catch (error) {
+    console.error("KulfoGW viewer API failed:", error);
 
     return NextResponse.json(
       {
-        error:
+        error: "Unable to load KulfoGW viewer data.",
+        details:
           error instanceof Error
             ? error.message
-            : "Unable to load Kulfo viewer data.",
+            : String(error),
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
-
   } finally {
-
-    await unlink(
-      scriptPath
-    ).catch(() => {});
-
+    await unlink(scriptPath).catch(() => {});
   }
 }
