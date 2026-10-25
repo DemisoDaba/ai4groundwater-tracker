@@ -1202,33 +1202,12 @@ export default function KulfoGWPage() {
               TEMPORAL GROUNDWATER
             </div>
 
-            {/*
-              TEMPORAL TIME-SERIES MODULE — TEMPORARILY DISABLED
-
-              Original link preserved for later reactivation:
-
-              <button
-                className="nav-item"
-                onClick={() => router.push("/gwtimeseries")}
-              >
-                <span>⌁</span>
-                Time Series
-              </button>
-
-              To reactivate later:
-              1. Remove this comment block.
-              2. Comment out or remove the disabled "Time Series — Later" button below.
-            */}
-
             <button
-              className="nav-item disabled"
-              disabled
-              aria-disabled="true"
-              title="Time-series analysis will be available later"
+              className="nav-item"
+              onClick={() => router.push("/gwtimeseries")}
             >
               <span>⌁</span>
               Time Series
-              <small>Later</small>
             </button>
 
             <button
